@@ -1,0 +1,28 @@
+# Java / Maven
+backend/target/
+backend/.mvn/wrapper/
+.mvn/
+
+# Node modules
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Uploads (file thực tế — chỉ giữ .gitkeep)
+uploads/*
+!uploads/.gitkeep
+
+# Docker
+.dockerignore
