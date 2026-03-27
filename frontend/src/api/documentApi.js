@@ -1,7 +1,34 @@
 import axios from 'axios';
 
-// Sử dụng relative URL — dev mode dùng Vite proxy, production dùng Nginx proxy
-const API_BASE = '/api/documents';
+// API base URL — in production, use env var injected at build time (VITE_API_URL)
+// In dev, Vite proxy forwards /api/* to backend, so relative URL works
+const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/documents';
+
+// Axios instance with default config
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+// Response interceptor: handle common errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      console.error('Unauthorized — check credentials')
+    }
+    if (error.response?.status === 403) {
+      console.error('Forbidden — check permissions')
+    }
+    if (!error.response) {
+      console.error('Network error — backend may be unreachable')
+    }
+    return Promise.reject(error)
+  }
+)
+
+export { api }
 
 export const documentApi = {
   // Upload document
@@ -9,7 +36,7 @@ export const documentApi = {
     const formData = new FormData();
     formData.append('name', name);
     formData.append('file', file);
-    const response = await axios.post(API_BASE, formData, {
+    const response = await api.post('/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
@@ -17,13 +44,13 @@ export const documentApi = {
 
   // Get all documents
   getAll: async () => {
-    const response = await axios.get(API_BASE);
+    const response = await api.get('/');
     return response.data;
   },
 
   // Download document
   download: async (id, fileName) => {
-    const response = await axios.get(`${API_BASE}/${id}`, {
+    const response = await api.get(`/${id}`, {
       responseType: 'blob',
     });
     const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -41,7 +68,7 @@ export const documentApi = {
     const formData = new FormData();
     if (name) formData.append('name', name);
     if (file) formData.append('file', file);
-    const response = await axios.put(`${API_BASE}/${id}`, formData, {
+    const response = await api.put(`/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
@@ -49,6 +76,6 @@ export const documentApi = {
 
   // Delete document
   delete: async (id) => {
-    await axios.delete(`${API_BASE}/${id}`);
+    await api.delete(`/${id}`);
   },
 };

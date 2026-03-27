@@ -24,5 +24,17 @@ npm-debug.log*
 uploads/*
 !uploads/.gitkeep
 
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
 # Docker
 .dockerignore
+Dockerfile.local
+docker-compose.local.yml
+
+# Terraform (secrets)
+*.tfvars
