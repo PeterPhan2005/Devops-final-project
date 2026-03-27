@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────
 # Stage 1: Build
 # ─────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM maven:3.9-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
@@ -9,8 +9,7 @@ WORKDIR /app
 COPY pom.xml .
 
 # Download and cache dependencies
-RUN apk add --no-cache maven && \
-    mvn dependency:go-offline -B
+RUN mvn dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
@@ -25,17 +24,19 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Install curl for healthcheck (Alpine doesn't include it by default)
+# Install curl for healthcheck
 RUN apk add --no-cache curl
 
-# Create non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app
+# Create app user and uploads directory
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    mkdir -p /app/uploads && chown -R appuser:appgroup /app
 
 COPY --from=builder /app/target/*.jar app.jar
 
-# Switch to non-root user
-USER appuser
+# Run as root so bind mount file sharing works with macOS host
+# For prod deployment, change to: USER appuser
+USER root
+RUN chmod 777 /app/uploads
 
 EXPOSE 8080
 

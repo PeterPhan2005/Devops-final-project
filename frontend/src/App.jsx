@@ -137,7 +137,7 @@ function App() {
     // File dùng blob URL (PDF, ảnh, txt)
     if (canPreview) {
       try {
-        const response = await fetch(`/api/documents/${doc.id}`);
+        const response = await fetch(`/api/documents/${doc.id}/preview`);
         if (!response.ok) throw new Error();
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
@@ -151,7 +151,7 @@ function App() {
     // File dùng mammoth (docx)
     if (canMammoth) {
       try {
-        const response = await fetch(`/api/documents/${doc.id}`);
+        const response = await fetch(`/api/documents/${doc.id}/preview`);
         if (!response.ok) throw new Error();
         const blob = await response.blob();
         const arrayBuffer = await blob.arrayBuffer();

@@ -100,6 +100,28 @@ public class DocumentService {
         return doc.getFileName().substring(doc.getFileName().indexOf("_") + 1);
     }
 
+    // Get MIME type based on file extension
+    public String getMimeType(String fileName) {
+        String ext = fileName.contains(".")
+            ? fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase()
+            : "";
+        return switch (ext) {
+            case "pdf"  -> "application/pdf";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png"  -> "image/png";
+            case "gif"  -> "image/gif";
+            case "txt"  -> "text/plain";
+            case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "doc"  -> "application/msword";
+            case "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "xls"  -> "application/vnd.ms-excel";
+            case "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "ppt"  -> "application/vnd.ms-powerpoint";
+            case "zip"  -> "application/zip";
+            default     -> "application/octet-stream";
+        };
+    }
+
     // Update document
     public DocumentDTO updateDocument(Long id, DocumentUpdateRequest request, MultipartFile newFile) {
         Document doc = documentRepository.findById(id)

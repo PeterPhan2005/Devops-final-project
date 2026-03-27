@@ -14,9 +14,9 @@ RUN npm ci --ci --prefer-offline
 # Copy source code
 COPY . .
 
-# Build with API URL injected at build time
-ARG API_URL=http://localhost:8080
-ENV VITE_API_URL=$API_URL
+# Build with empty API URL → use relative /api/* (proxied by nginx in Docker)
+ARG VITE_API_URL=
+ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
 

@@ -1,20 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// API URL injected at build time via VITE_API_URL env var
-// Fallback to localhost for local dev
-const apiUrl = process.env.VITE_API_URL || 'http://localhost:8080'
-
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
     proxy: {
+      // Dev: Vite proxy /api/* → backend at localhost:8080
       '/api': {
-        target: apiUrl,
+        target: 'http://localhost:8080',
         changeOrigin: true,
-        // Optional: log proxy requests in dev
-        // configure: (proxy) => { proxy.on('proxyReq', ...) }
       }
     }
   },
@@ -26,7 +21,7 @@ export default defineConfig({
     // Chunk size warning limit
     chunkSizeWarningLimit: 1000,
   },
-  // Make env vars available as import.meta.env
-  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
+  // Expose env vars with VITE_ prefix to the app
+  envPrefix: ['VITE_'],
 })
 

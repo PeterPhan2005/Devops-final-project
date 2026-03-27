@@ -1,7 +1,8 @@
 import axios from 'axios';
 
-// API base URL — in production, use env var injected at build time (VITE_API_URL)
-// In dev, Vite proxy forwards /api/* to backend, so relative URL works
+// API base URL — always use relative path so nginx proxies /api/* to backend.
+// VITE_API_URL is only needed for local dev without Vite proxy.
+// For Docker/production: VITE_API_URL should be empty → relative URL works via nginx.
 const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/documents';
 
 // Axios instance with default config
@@ -36,7 +37,7 @@ export const documentApi = {
     const formData = new FormData();
     formData.append('name', name);
     formData.append('file', file);
-    const response = await api.post('/', formData, {
+    const response = await api.post('', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
@@ -44,7 +45,7 @@ export const documentApi = {
 
   // Get all documents
   getAll: async () => {
-    const response = await api.get('/');
+    const response = await api.get('');
     return response.data;
   },
 

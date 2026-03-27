@@ -47,7 +47,7 @@ public class DocumentController {
         return ResponseEntity.ok(documents);
     }
 
-    // GET /api/documents/{id} - Download file
+    // GET /api/documents/{id} - Download file (force download)
     @GetMapping("/{id}")
     public ResponseEntity<Resource> downloadDocument(@PathVariable Long id) {
         try {
@@ -58,6 +58,24 @@ public class DocumentController {
                     .contentType(MediaType.APPLICATION_OCTET_STREAM)
                     .header(HttpHeaders.CONTENT_DISPOSITION,
                             "attachment; filename=\"" + fileName + "\"")
+                    .body(resource);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    // GET /api/documents/{id}/preview - Preview file in browser (inline)
+    @GetMapping("/{id}/preview")
+    public ResponseEntity<Resource> previewDocument(@PathVariable Long id) {
+        try {
+            Resource resource = documentService.downloadFile(id);
+            String fileName = documentService.getOriginalFileName(id);
+            String mimeType = documentService.getMimeType(fileName);
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "inline; filename=\"" + fileName + "\"")
                     .body(resource);
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
