@@ -67,8 +67,8 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          workload-identity-provider: ${{ env.WORKLOAD_PROVIDER }}
-          service-account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          workload_identity_provider: ${{ env.WORKLOAD_PROVIDER }}
+          service_account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.REGISTRY }}
@@ -93,8 +93,8 @@ jobs:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          workload-identity-provider: ${{ env.WORKLOAD_PROVIDER }}
-          service-account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          workload_identity_provider: ${{ env.WORKLOAD_PROVIDER }}
+          service_account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Setup kubectl
         uses: google-github-actions/setup-gcloud@v2
