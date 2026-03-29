@@ -35,7 +35,7 @@ metadata:
     kubernetes.io/ingress.allow-http: "false"
 spec:
   rules:
-    - host: peterphan.online
+    - host: devops.peterphan.online
       http:
         paths:
           - path: /api
@@ -68,5 +68,4 @@ metadata:
   namespace: doc-system
 spec:
   domains:
-    - peterphan.online
-    - www.peterphan.online
+    - devops.peterphan.online
