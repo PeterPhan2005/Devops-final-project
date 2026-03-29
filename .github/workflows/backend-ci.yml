@@ -88,7 +88,7 @@ jobs:
           service_account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Configure Docker
-        run: gcloud auth configure-docker ${{ env.REGISTRY }}
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
 
       - name: Build and Push
         run: |
