@@ -31,8 +31,8 @@ metadata:
     networking.gke.io/managed-certificates: "doc-system-cert"
     # Static IP đã reserve
     kubernetes.io/ingress.global-static-ip-name: "doc-system-ip"
-    # Redirect HTTP to HTTPS
-    kubernetes.io/ingress.allow-http: "false"
+    # CHO PHEP HTTP de certificate duoc provision
+    kubernetes.io/ingress.allow-http: "true"
 spec:
   rules:
     - host: devops.peterphan.online
