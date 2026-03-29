@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: doc-system-uploads
+  namespace: doc-system
+spec:
+  accessModes:
+    - ReadWriteOnce    # ← Đổi từ ReadWriteMany
+  storageClassName: standard  # ← Đổi từ standard-rwx
+  resources:
+    requests:
+      storage: 1Gi

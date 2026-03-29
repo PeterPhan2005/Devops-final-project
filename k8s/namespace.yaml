@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: doc-system
+  labels:
+    name: doc-system
+    environment: production

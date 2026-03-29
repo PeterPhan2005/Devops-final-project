@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: doc-system-config
+  namespace: doc-system
+data:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://10.244.0.5:5432/docdb"
+  SPRING_DATASOURCE_USERNAME: "docuser"
+  DB_HOST: "10.244.0.5"
+  DB_PORT: "5432"
+  DB_NAME: "docdb"
+  SHOW_SQL: "false"
+  FORMAT_SQL: "false"
+  MAX_FILE_SIZE: "50MB"
+  MAX_REQUEST_SIZE: "50MB"
+  APP_UPLOAD_DIR: "/app/uploads"

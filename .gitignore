@@ -38,3 +38,13 @@ docker-compose.local.yml
 
 # Terraform (secrets)
 *.tfvars
+*.json
+terraform-sa-key.json
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars

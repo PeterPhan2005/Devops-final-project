@@ -1,0 +1,56 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: frontend-backend
+  namespace: doc-system
+spec:
+  healthCheck:
+    type: HTTP
+    port: 80
+    requestPath: /
+
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: backend-backend
+  namespace: doc-system
+spec:
+  healthCheck:
+    type: HTTP
+    port: 8080
+    requestPath: /actuator/health
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: doc-system-ingress
+  namespace: doc-system
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: doc-backend-svc
+                port:
+                  number: 80
+          - path: /uploads
+            pathType: Prefix
+            backend:
+              service:
+                name: doc-backend-svc
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: doc-frontend-svc
+                port:
+                  number: 80

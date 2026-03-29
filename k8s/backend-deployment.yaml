@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doc-backend
+  namespace: doc-system
+spec:
+  replicas: 1               # ← 1 pod (RWO PVC không thể share giữa 2 pods khác node)
+  selector:
+    matchLabels:
+      app: doc-backend
+
+  # Rolling update strategy — không downtime
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: doc-backend
+    spec:
+      # Security: chạy non-root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: backend
+          # Thay bằng image của bạn
+          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-backend:v2
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 8080
+              name: http
+
+          envFrom:
+            - configMapRef:
+                name: doc-system-config
+            - secretRef:
+                name: doc-system-secret
+
+          # Volume mount cho uploads
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
+
+          # Health check
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+          # Resource limits
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+
+      # Share volume giữa các pods
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: doc-system-uploads
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doc-backend-svc
+  namespace: doc-system
+  annotations:
+    cloud.google.com/backend-config: '{"ports": {"80":"backend-backend"}}'
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: doc-backend
+  ports:
+    - port: 80
+      targetPort: 8080
+      name: http

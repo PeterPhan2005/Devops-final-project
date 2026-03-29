@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: doc-frontend
+  namespace: doc-system
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: doc-frontend
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: doc-frontend
+    spec:
+      containers:
+        - name: frontend
+          # Thay bằng image của bạn
+          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-frontend:v3
+          imagePullPolicy: Always
+
+          ports:
+            - containerPort: 80
+              name: http
+
+          env:
+            # API URL trỏ đến backend service (internal DNS)
+            - name: VITE_API_URL
+              value: "http://doc-backend-svc:80"
+
+          # Health check
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doc-frontend-svc
+  namespace: doc-system
+  annotations:
+    cloud.google.com/backend-config: '{"ports": {"80":"frontend-backend"}}'
+    cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: doc-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
