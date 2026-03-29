@@ -8,7 +8,6 @@ spec:
     type: HTTP
     port: 80
     requestPath: /
-
 ---
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
@@ -20,7 +19,6 @@ spec:
     type: HTTP
     port: 8080
     requestPath: /actuator/health
-
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -29,9 +27,16 @@ metadata:
   namespace: doc-system
   annotations:
     kubernetes.io/ingress.class: "gce"
+    # Managed SSL Certificate (Google tự động cấp và renew)
+    networking.gke.io/managed-certificates: "doc-system-cert"
+    # Static IP đã reserve
+    kubernetes.io/ingress.global-static-ip-name: "doc-system-ip"
+    # Redirect HTTP to HTTPS
+    kubernetes.io/ingress.allow-http: "false"
 spec:
   rules:
-    - http:
+    - host: peterphan.online
+      http:
         paths:
           - path: /api
             pathType: Prefix
@@ -54,3 +59,14 @@ spec:
                 name: doc-frontend-svc
                 port:
                   number: 80
+---
+# Managed SSL Certificate
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: doc-system-cert
+  namespace: doc-system
+spec:
+  domains:
+    - peterphan.online
+    - www.peterphan.online

@@ -134,6 +134,7 @@ jobs:
           kubectl apply -f k8s/secret.yaml
           kubectl apply -f k8s/storage.yaml
           kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/ingress.yaml
 
       - name: Verify deployment
         run: kubectl rollout status deployment/doc-backend -n doc-system --timeout=300s
