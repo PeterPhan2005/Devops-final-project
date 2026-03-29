@@ -14,6 +14,8 @@ env:
   REGISTRY: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo
   IMAGE_NAME: doc-frontend
   GAR_REGION: us-central1
+  PROJECT_ID: serious-physics-477417-i8
+  WORKLOAD_PROVIDER: projects/680857674639/locations/global/workloadIdentityPools/github-pool/providers/github-provider
 
 jobs:
   ci:
@@ -43,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: ci
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: 'read'
+      id-token: 'write'
     steps:
       - uses: actions/checkout@v4
 
@@ -58,10 +63,12 @@ jobs:
           npm run build
         working-directory: ./frontend
 
+      # Use Workload Identity Federation (recommended by Google)
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload-identity-provider: ${{ env.WORKLOAD_PROVIDER }}
+          service-account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.REGISTRY }}
@@ -76,13 +83,18 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: push
+    permissions:
+      contents: 'read'
+      id-token: 'write'
     steps:
       - uses: actions/checkout@v4
 
+      # Use Workload Identity Federation (recommended by Google)
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload-identity-provider: ${{ env.WORKLOAD_PROVIDER }}
+          service-account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
       - name: Setup kubectl
         uses: google-github-actions/setup-gcloud@v2
@@ -90,7 +102,7 @@ jobs:
       - name: Get GKE credentials
         run: |
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-            --region=${{ env.GAR_REGION }} --project=${{ secrets.GCP_PROJECT_ID }}
+            --region=${{ env.GAR_REGION }} --project=${{ env.PROJECT_ID }}
 
       - name: Deploy to GKE
         run: |
