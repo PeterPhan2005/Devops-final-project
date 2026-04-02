@@ -7,12 +7,14 @@ on:
       - 'backend/**'
       - 'terraform/**'
       - 'k8s/**'
+      - '.github/workflows/**'   # ← Trigger khi workflow file thay đổi
   pull_request:
     branches: [main]
     paths:
       - 'backend/**'
       - 'terraform/**'
       - 'k8s/**'
+      - '.github/workflows/**'
 
 env:
   REGISTRY: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo
