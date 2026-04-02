@@ -1,0 +1,41 @@
+# ============================================================
+# Grafana Ingress — HTTPS via GKE Ingress + ManagedCertificate
+# Requires: Static IP "grafana-ip" (created in terraform/vpc/main.tf)
+# DNS: A record grafana.peterphan.online → <terraform output grafana_static_ip>
+# ============================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.static-ip-name: "grafana-ip"
+    # HTTP → HTTPS redirect (allow HTTP so GKE can redirect to HTTPS)
+    kubernetes.io/ingress.allow-http: "true"
+    networking.gke.io/managed-certificates: "grafana-cert"
+spec:
+  ingressClassName: gce
+  rules:
+    - host: grafana.peterphan.online
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 80
+
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: grafana-cert
+  namespace: monitoring
+spec:
+  domains:
+    - grafana.peterphan.online
+

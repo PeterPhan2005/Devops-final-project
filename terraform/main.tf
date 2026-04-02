@@ -21,6 +21,7 @@ terraform {
 # VPC Network
 module "vpc" {
   source       = "./vpc"
+  project_id   = var.project_id
   project_name = var.project_name
   environment  = var.environment
   gcp_region   = var.gcp_region
@@ -59,4 +60,13 @@ module "registry" {
   project_id   = var.project_id
   project_name = var.project_name
   gcp_region   = var.gcp_region
+}
+
+# Filestore NFS — shared file storage for document uploads (enables HPA multi-pod)
+module "filestore" {
+  source       = "./filestore"
+  project_id   = var.project_id
+  project_name = var.project_name
+  gcp_region   = var.gcp_region
+  vpc_network  = module.vpc.vpc_self_link
 }

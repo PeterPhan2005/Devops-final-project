@@ -27,13 +27,11 @@ metadata:
   namespace: doc-system
   annotations:
     kubernetes.io/ingress.class: "gce"
-    # Managed SSL Certificate (Google tự động cấp và renew)
+    kubernetes.io/ingress.global-static-ip-name: "doc-system-final"
     networking.gke.io/managed-certificates: "doc-system-cert"
-    # Static IP đã reserve
-    kubernetes.io/ingress.global-static-ip-name: "doc-system-ip"
-    # CHO PHEP HTTP de certificate duoc provision
     kubernetes.io/ingress.allow-http: "true"
 spec:
+  ingressClassName: gce
   rules:
     - host: devops.peterphan.online
       http:
@@ -60,7 +58,6 @@ spec:
                 port:
                   number: 80
 ---
-# Managed SSL Certificate
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:

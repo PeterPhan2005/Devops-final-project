@@ -1,6 +1,7 @@
+variable "project_id"   { type = string }
 variable "project_name" { type = string }
-variable "environment" { type = string }
-variable "gcp_region" { type = string }
+variable "environment"  { type = string }
+variable "gcp_region"  { type = string }
 
 resource "google_compute_network" "main" {
   name                    = "${var.project_name}-vpc"
@@ -64,4 +65,42 @@ output "vpc_self_link" {
 
 output "subnetwork_name" {
   value = google_compute_subnetwork.gke.name
+}
+
+# ── Global Static IPs ─────────────────────────────────────────────
+
+# Main application static IP (used by doc-system-ingress)
+resource "google_compute_global_address" "app" {
+  project    = var.project_id   # GCP project ID, not project name
+  name       = "${var.project_name}-final"
+  purpose    = "GLOBAL"
+  ip_version = "IPV4"
+}
+
+# Grafana static IP (used by grafana-ingress + grafana-cert)
+resource "google_compute_global_address" "grafana" {
+  project    = var.project_id   # GCP project ID, not project name
+  name       = "grafana-ip"
+  purpose    = "GLOBAL"
+  ip_version = "IPV4"
+}
+
+output "app_static_ip" {
+  description = "Static IP for main application"
+  value      = google_compute_global_address.app.address
+}
+
+output "grafana_static_ip" {
+  description = "Static IP for Grafana dashboard"
+  value      = google_compute_global_address.grafana.address
+}
+
+output "app_static_ip_name" {
+  description = "Static IP resource name for main application ingress"
+  value      = google_compute_global_address.app.name
+}
+
+output "grafana_static_ip_name" {
+  description = "Static IP resource name for Grafana ingress"
+  value      = google_compute_global_address.grafana.name
 }

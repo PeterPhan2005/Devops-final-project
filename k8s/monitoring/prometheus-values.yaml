@@ -1,0 +1,215 @@
+# ============================================================
+# kube-prometheus-stack Helm Values — GKE Production Ready
+# Chart: prometheus-community/kube-prometheus-stack
+# ============================================================
+# IMPORTANT: Deploy with:
+#   helm install prometheus prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring --create-namespace \
+#     -f prometheus-values.yaml
+#
+# Upgrade with:
+#   helm upgrade prometheus prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring -f prometheus-values.yaml
+
+# ── 1. Prometheus Operator ─────────────────────────────────
+prometheusOperator:
+  admissionWebhooks:
+    enabled: true
+    patch:
+      enabled: true
+
+  # Use upstream Prometheus Operator image (NO custom GAR image needed)
+  image:
+    repository: quay.io/prometheus-operator/prometheus-operator
+    tag: v0.89.0
+
+# ── 2. Prometheus Server ────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    evaluationInterval: 30s
+    scrapeInterval: 30s
+    externalLabels:
+      cluster: doc-system-gke
+    securityContext:
+      fsGroup: 2000
+      runAsNonRoot: true
+      runAsUser: 1000
+
+    # Auto-discover PrometheusRules with role=alert-rules in any namespace
+    ruleSelector:
+      matchLabels:
+        role: alert-rules
+    ruleNamespaceSelector: {}
+
+    # Auto-discover ServiceMonitors with release=prometheus in any namespace
+    serviceMonitorSelector:
+      matchLabels:
+        release: prometheus
+    serviceMonitorNamespaceSelector: {}
+
+    # Auto-discover PodMonitors in any namespace
+    podMonitorSelector:
+      matchLabels:
+        release: prometheus
+    podMonitorNamespaceSelector: {}
+
+  # Use upstream Prometheus image (NO custom GAR image needed)
+  server:
+    image:
+      repository: prom/prometheus
+      tag: v3.10.0
+
+    persistentVolume:
+      enabled: true
+      storageClass: standard
+      size: 10Gi
+
+    service:
+      type: ClusterIP
+
+  # Disable Thanos sidecar (not needed for this project)
+  Thanos:
+    enabled: false
+
+# ── 3. Alertmanager ────────────────────────────────────────
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    replicas: 2          # HA setup
+    securityContext:
+      fsGroup: 2000
+      runAsNonRoot: true
+      runAsUser: 1000
+
+    # Alertmanager config must be nested under alertmanagerSpec.config
+    config:
+      global:
+        resolve_timeout: 5m
+      route:
+        group_by: ['alertname', 'namespace']
+        group_wait: 10s
+        group_interval: 10s
+        repeat_interval: 12h
+        receiver: 'null'
+        routes:
+          - match:
+              alertname: Watchdog
+            receiver: 'null'
+          - match:
+              severity: critical
+            receiver: 'critical-alerts'
+          - match:
+              severity: warning
+            receiver: 'warning-alerts'
+      receivers:
+        - name: 'null'
+        - name: 'critical-alerts'
+          webhook_configs:
+            - url: 'http://doc-backend-svc.doc-system:80/actuator/alerts'
+              send_resolved: true
+        - name: 'warning-alerts'
+          webhook_configs:
+            - url: 'http://doc-backend-svc.doc-system:80/actuator/alerts'
+              send_resolved: true
+      inhibit_rules:
+        - source_match:
+            severity: 'critical'
+          target_match:
+            severity: 'warning'
+          equal: ['alertname', 'namespace']
+
+# ── 4. Grafana ─────────────────────────────────────────────
+grafana:
+  enabled: true
+  adminPassword: "docSystem2024!"
+
+  # Use upstream Grafana image (NO custom GAR image needed)
+  image:
+    repository: grafana/grafana
+    tag: 12.4.2
+
+  # Persistence for dashboards and settings
+  persistence:
+    enabled: true
+    storageClassName: "standard"
+    size: 2Gi
+
+  service:
+    type: ClusterIP
+
+  # Sidecar: automatically load dashboards from ConfigMaps
+  dashboardProviders:
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: 'default'
+            orgId: 1
+            folder: ''
+            type: file
+            disableDeletion: false
+            updateIntervalSeconds: 10
+            options:
+              path: /var/lib/grafana/dashboards/default
+
+  dashboards:
+    default:
+      # Will be provisioned by the ConfigMap with grafana_dashboard: "1" label
+      # See app-dashboard.yaml
+
+  # Sidecar datasources: automatically configure Prometheus datasource
+  sidecar:
+    dashboards:
+      enabled: true
+      defaultLabel: grafana_dashboard
+      search: /var/lib/grafana/dashboards/
+      resource: both
+    datasources:
+      enabled: true
+      defaultDatasourceEnabled: false
+      uid: prometheus
+      url: http://prometheus:9090
+      jsonData:
+        timeInterval: 15s
+        httpMethod: POST
+
+# ── 5. Node Exporter ───────────────────────────────────────
+# Required for node-level CPU/memory metrics used in Grafana dashboards
+nodeExporter:
+  enabled: true
+
+# ── 6. Kube State Metrics ──────────────────────────────────
+# Required for deployment/pod/replica metrics used in alerts
+kubeStateMetrics:
+  enabled: true
+
+# ── 7. Disable unused components ──────────────────────────
+pushgateway:
+  enabled: false
+
+# ── 8. Core K8s metrics ────────────────────────────────────
+kubeApiServer:
+  enabled: true
+
+kubelet:
+  enabled: true
+  serviceMonitor:
+    # Scrape kubelet directly (more accurate than via API server)
+    scheme: https
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tlsConfig:
+      insecureSkipVerify: true
+
+coreDns:
+  enabled: true
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeEtcd:
+  enabled: false

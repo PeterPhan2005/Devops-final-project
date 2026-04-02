@@ -1,0 +1,296 @@
+# ============================================================
+# PrometheusRules — Production Alerts for Doc System
+# Namespace: monitoring  (role=alert-rules label triggers Prometheus scraping)
+# ============================================================
+# Metrics used:
+#   - kube_*              (kube-state-metrics)    ← MUST be enabled in Helm values
+#   - container_*         (kubelet/cAdvisor)      ← MUST have nodeExporter enabled
+#   - up                  (prometheus itself)
+#
+# NOTE: GCE Ingress does NOT expose NGINX Ingress metrics.
+#       All HTTP/backend metrics use kube_* and container_* metrics only.
+# ============================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: doc-system-alerts
+  namespace: monitoring
+  labels:
+    prometheus: k8s
+    role: alert-rules
+    app: doc-system
+spec:
+  groups:
+
+    # ── 1. Application Availability ──────────────────────────
+    - name: app-availability
+      interval: 30s
+      rules:
+
+        # CRITICAL: Pod down > 1 minute
+        - alert: AppPodDown
+          expr: |
+            sum(kube_pod_container_status_running{namespace="doc-system", pod=~"doc-.*"}) == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Application pod is not running"
+            description: "Pod `{{ $labels.pod }}` in namespace `{{ $labels.namespace }}` has been down for more than 1 minute."
+            runbook_url: "https://devops.peterphan.online/runbooks/app-pod-down"
+
+        # WARNING: Pod restarting frequently (> 1 restart every ~20 seconds)
+        - alert: AppPodHighRestartRate
+          expr: |
+            sum(rate(kube_pod_container_status_restarts_total{namespace="doc-system", pod=~"doc-.*"}[10m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Application pod is restarting frequently"
+            description: "Pod `{{ $labels.pod }}` restarted {{ $value | printf \"%.2f\" }} times/sec in the last 10 minutes."
+
+        # WARNING: Deployment has unavailable replicas
+        - alert: AppDeploymentReplicasUnavailable
+          expr: |
+            kube_deployment_spec_replicas{namespace="doc-system", deployment=~"doc-.*"}
+            !=
+            kube_deployment_status_replicas_available{namespace="doc-system", deployment=~"doc-.*"}
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Deployment has unavailable replicas"
+            description: "Deployment `{{ $labels.deployment }}` has {{ $value }} unavailable replica(s)."
+
+        # CRITICAL: Pod repeatedly crashing (OOM, error state)
+        - alert: AppPodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="doc-system", pod=~"doc-.*"}[5m]) > 0.1
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod is crash looping"
+            description: "Pod `{{ $labels.pod }}` is restarting more than 6 times per minute."
+
+    # ── 2. CPU Resource Usage ────────────────────────────────
+    - name: app-resource-cpu
+      interval: 30s
+      rules:
+
+        # WARNING: CPU > 80% of limit for 5 minutes
+        - alert: AppHighCPU
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace="doc-system", pod=~"doc-.*"}[5m])) by (pod)
+            / on(pod) group_left()
+            kube_pod_container_resource_limits{namespace="doc-system", pod=~"doc-.*", resource="cpu"}
+            > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage on application pod"
+            description: "Pod `{{ $labels.pod }}` CPU usage is above 80%% of limit for 5 minutes."
+
+        # CRITICAL: CPU > 90% of limit for 2 minutes
+        - alert: AppCriticalCPU
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace="doc-system", pod=~"doc-.*"}[5m])) by (pod)
+            / on(pod) group_left()
+            kube_pod_container_resource_limits{namespace="doc-system", pod=~"doc-.*", resource="cpu"}
+            > 0.9
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical CPU usage on application pod"
+            description: "Pod `{{ $labels.pod }}` CPU usage is above 90%% of limit."
+
+    # ── 3. Memory Resource Usage ────────────────────────────
+    - name: app-resource-memory
+      interval: 30s
+      rules:
+
+        # WARNING: Memory > 80% of limit for 10 minutes
+        - alert: AppHighMemory
+          expr: |
+            container_memory_working_set_bytes{namespace="doc-system", pod=~"doc-.*"}
+            / on(pod) group_left()
+            kube_pod_container_resource_limits{namespace="doc-system", pod=~"doc-.*", resource="memory"}
+            > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage on application pod"
+            description: "Pod `{{ $labels.pod }}` memory usage is above 80%% of limit for 10 minutes."
+
+        # CRITICAL: Memory > 90% of limit for 2 minutes (risk of OOM Kill)
+        - alert: AppCriticalMemory
+          expr: |
+            container_memory_working_set_bytes{namespace="doc-system", pod=~"doc-.*"}
+            / on(pod) group_left()
+            kube_pod_container_resource_limits{namespace="doc-system", pod=~"doc-.*", resource="memory"}
+            > 0.9
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical memory usage on application pod"
+            description: "Pod `{{ $labels.pod }}` memory usage is above 90%% of limit — risk of OOM Kill."
+
+    # ── 4. Backend HTTP Availability (via Spring Boot Actuator) ──
+    - name: app-backend-health
+      interval: 1m
+      rules:
+
+        # WARNING: Backend health endpoint returning non-UP status
+        - alert: BackendHealthDown
+          expr: |
+            sum by (pod) (up{job="doc-backend-monitor", pod=~"doc-backend-.*"}) == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend service is not reachable"
+            description: "Backend pod `{{ $labels.pod }}` health check has failed."
+
+        # WARNING: Backend pod count is zero (all pods down)
+        - alert: BackendNoReplicas
+          expr: |
+            sum(kube_pod_container_status_running{namespace="doc-system", pod=~"doc-backend-.*"}) == 0
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "No backend replicas running"
+            description: "All backend pods are down! Immediate action required."
+
+    # ── 5. HPA / Scaling ────────────────────────────────────
+    - name: app-scaling
+      interval: 1m
+      rules:
+
+        # WARNING: HPA is at maximum replicas (approaching ceiling)
+        - alert: HPAAtMaxReplicas
+          expr: |
+            kube_hpa_status_current_replicas{namespace="doc-system"}
+            ==
+            kube_hpa_spec_max_replicas{namespace="doc-system"}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "HPA is at maximum replica count"
+            description: "HPA `{{ $labels.hpa }}` is running at max replicas ({{ $value }}). Consider increasing max replicas."
+
+        # INFO: HPA is at minimum replicas (scaled to zero)
+        - alert: HPAAtMinReplicas
+          expr: |
+            kube_hpa_status_current_replicas{namespace="doc-system"}
+            ==
+            kube_hpa_spec_min_replicas{namespace="doc-system"}
+            and
+            kube_hpa_spec_min_replicas{namespace="doc-system"} > 0
+          for: 10m
+          labels:
+            severity: info
+          annotations:
+            summary: "HPA is at minimum replica count"
+            description: "HPA `{{ $labels.hpa }}` is running at minimum replicas ({{ $value }})."
+
+    # ── 6. Monitoring Stack Health ──────────────────────────
+    - name: monitoring-stack
+      interval: 1m
+      rules:
+
+        # WARNING: Prometheus itself is down
+        - alert: PrometheusDown
+          expr: up{job="prometheus", namespace="monitoring"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Prometheus is down"
+            description: "Prometheus server has been down for more than 2 minutes."
+
+        # WARNING: Alertmanager is down
+        - alert: AlertmanagerDown
+          expr: up{job="alertmanager", namespace="monitoring"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Alertmanager is down"
+            description: "Alertmanager has been down for more than 2 minutes. Alerts will NOT be sent!"
+
+        # WARNING: Prometheus storage above 85%
+        - alert: PrometheusStorageAlmostFull
+          expr: |
+            (
+              kubelet_volume_stats_used_bytes{namespace="monitoring", persistentvolumeclaim=~"data-prometheus-.*"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="monitoring", persistentvolumeclaim=~"data-prometheus-.*"}
+            ) > 0.85
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Prometheus storage is above 85%"
+            description: "PVC `{{ $labels.persistentvolumeclaim }}` is {{ $value | humanizePercentage }} full. Consider increasing storage or retention reduction."
+
+        # WARNING: Prometheus target missing (not scraping any endpoint)
+        - alert: PrometheusTargetMissing
+          expr: |
+            sum by (job) (up{job=~"doc-backend-monitor|doc-frontend-monitor"}) == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ServiceMonitor target is down"
+            description: "Prometheus scrape target `{{ $labels.job }}` has been down for more than 2 minutes."
+
+        # WARNING: Grafana is not responding
+        - alert: GrafanaDown
+          expr: up{job="grafana", namespace="monitoring"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Grafana is not responding"
+            description: "Grafana has been unreachable for more than 2 minutes."
+
+    # ── 7. PVC / Storage ────────────────────────────────────
+    - name: app-storage
+      interval: 5m
+      rules:
+
+        # WARNING: PVC is above 80% full
+        - alert: PVCAbove80Percent
+          expr: |
+            kubelet_volume_stats_used_bytes{namespace="doc-system"}
+            /
+            kubelet_volume_stats_capacity_bytes{namespace="doc-system"}
+            > 0.8
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC `{{ $labels.persistentvolumeclaim }}` is above 80%% full"
+            description: "PVC usage is {{ $value | humanizePercentage }}. Consider increasing storage size."
+
+        # CRITICAL: PVC is above 95% full (risk of no space for uploads)
+        - alert: PVCAbove95Percent
+          expr: |
+            kubelet_volume_stats_used_bytes{namespace="doc-system"}
+            /
+            kubelet_volume_stats_capacity_bytes{namespace="doc-system"}
+            > 0.95
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PVC `{{ $labels.persistentvolumeclaim }}` is critically full"
+            description: "PVC is {{ $value | humanizePercentage }} full. File uploads will fail imminently!"

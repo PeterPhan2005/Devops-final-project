@@ -111,8 +111,40 @@ jobs:
       - name: Deploy to GKE
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
-          sed -i "s|doc-frontend:.*|doc-frontend:${SHORT_SHA}|" k8s/frontend-deployment.yaml
+
+          # ── 1) Create namespace ──────────────────────────────────
+          kubectl apply -f k8s/namespace.yaml
+
+          # ── 2) Monitoring stack via Helm (idempotent: install or upgrade) ──
+          helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --create-namespace \
+            -f k8s/monitoring/prometheus-values.yaml \
+            --wait --timeout 5m
+
+          # ── 3) PrometheusOperator CRDs ───────────────────────────────
+          kubectl apply -f k8s/monitoring/grafana-datasource.yaml
+          kubectl apply -f k8s/monitoring/app-dashboard.yaml
+          kubectl apply -f k8s/monitoring/app-service-monitor.yaml
+          kubectl apply -f k8s/monitoring/prometheus-rules.yaml
+
+          # ── 4) Application configs ─────────────────────────────────
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/secret.yaml
+          kubectl apply -f k8s/storage.yaml
+
+          # ── 5) HPA ─────────────────────────────────────────────────
+          kubectl apply -f k8s/hpa.yaml
+
+          # ── 6) Frontend deployment ─────────────────────────────────
+          sed -i "s|doc-frontend:[a-zA-Z0-9._-]*|doc-frontend:${SHORT_SHA}|" k8s/frontend-deployment.yaml
           kubectl apply -f k8s/frontend-deployment.yaml
+
+          # ── 7) Ingress + ManagedCertificate (HTTPS) ────────────────
+          kubectl apply -f k8s/ingress.yaml
+
+          # ── 8) Grafana ingress + ManagedCertificate ───────────────
+          kubectl apply -f k8s/monitoring/grafana-ingress.yaml
 
       - name: Verify deployment
         run: kubectl rollout status deployment/doc-frontend -n doc-system --timeout=300s

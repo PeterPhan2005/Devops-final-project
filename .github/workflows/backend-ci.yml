@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'terraform/**'
+      - 'k8s/**'
   pull_request:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'terraform/**'
+      - 'k8s/**'
 
 env:
   REGISTRY: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo
@@ -55,7 +59,9 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          # CRITICAL vulns → fail pipeline (exit 1)
+          # HIGH vulns → warn only (exit 0), reviewed manually via SARIF report
+          exit-code: '1'
 
       - name: Upload scan results
         if: always()
@@ -65,7 +71,7 @@ jobs:
 
   push:
     runs-on: ubuntu-latest
-    needs: security-scan
+    needs: [ci, security-scan]
     if: github.ref == 'refs/heads/main'
     permissions:
       contents: 'read'
@@ -101,22 +107,64 @@ jobs:
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHORT_SHA}
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-  deploy:
+  terraform:
     runs-on: ubuntu-latest
     needs: push
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: 'read'
       id-token: 'write'
     steps:
       - uses: actions/checkout@v4
 
-      # Use Workload Identity Federation (recommended by Google)
+      # Authenticate via Workload Identity (same SA used for GKE + Terraform)
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WORKLOAD_PROVIDER }}
           service_account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
 
+      # Setup Terraform
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      # Initialize and apply Terraform (idempotent — only applies changes)
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: |
+          terraform init \
+            -reconfigure \
+            -backend-config="bucket=doc-system-terraform-state-pete" \
+            -backend-config="prefix=prod"
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: terraform plan -no-color || true
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        env:
+          TF_VAR_db_password: ${{ secrets.TERRAFORM_DB_PASSWORD }}
+        run: terraform apply -auto-approve -no-color
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [terraform, ci]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── 1) Authenticate to GCP via Workload Identity ───────────
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_PROVIDER }}
+          service_account: terraform-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+
+      # ── 2) Setup kubectl + get GKE credentials ──────────────────
       - name: Setup kubectl
         uses: google-github-actions/setup-gcloud@v2
 
@@ -128,16 +176,83 @@ jobs:
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
             --region=${{ env.GAR_REGION }} --project=${{ env.PROJECT_ID }}
 
-      - name: Deploy to GKE
+      # ── 3) Fetch Terraform outputs (Filestore IP + GKE SA email) ──
+      - name: Download Terraform state
+        run: |
+          gcloud storage cp gs://doc-system-terraform-state-pete/prod/default.tfstate /tmp/terraform.tfstate
+
+      - name: Extract Terraform outputs
+        run: |
+          # GKE Service Account email (for Workload Identity annotation on K8s SA)
+          GKE_SA_EMAIL=$(grep -oP '"gke_service_account_email"[^}]*value = "\K[^"]+' /tmp/terraform.tfstate)
+          echo "GKE_SA_EMAIL=$GKE_SA_EMAIL"
+          echo "GKE_SA_EMAIL=$GKE_SA_EMAIL" >> $GITHUB_ENV
+
+          # Filestore NFS IP (for NFS PersistentVolume)
+          FILESTORE_IP=$(grep -oP '"filestore_nfs_ip"[^}]*value = "\K[^"]+' /tmp/terraform.tfstate)
+          echo "FILESTORE_IP=$FILESTORE_IP"
+          echo "FILESTORE_IP=$FILESTORE_IP" >> $GITHUB_ENV
+
+      # ── 4) Inject dynamic values into Kubernetes manifests ──────
+      - name: Prepare K8s manifests
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
-          sed -i "s|doc-backend:.*|doc-backend:${SHORT_SHA}|" k8s/backend-deployment.yaml
+
+          # Inject backend image tag
+          sed -i "s|doc-backend:[a-zA-Z0-9._-]*|doc-backend:${SHORT_SHA}|" k8s/backend-deployment.yaml
+
+          # Inject GKE SA email into K8s ServiceAccount (Workload Identity binding)
+          sed -i "s|{{ GKE_SA_EMAIL }}|${GKE_SA_EMAIL}|g" k8s/service-account.yaml
+
+          # Inject Filestore NFS IP into PersistentVolume
+          sed -i "s|<filestore-ip>|${FILESTORE_IP}|g" k8s/nfs-pv.yaml
+
+      # ── 5) Deploy to GKE (order matters!) ─────────────────────
+      - name: Deploy to GKE
+        run: |
+          # ── 5a) Create namespace ──────────────────────────────────
           kubectl apply -f k8s/namespace.yaml
+
+          # ── 5b) ServiceAccount (Workload Identity binding) ─────────
+          kubectl apply -f k8s/service-account.yaml
+
+          # ── 5c) NFS PersistentVolume (Filestore) ────────────────────
+          kubectl apply -f k8s/nfs-pv.yaml
+
+          # ── 5d) NFS PVC (must exist before pods start) ──────────────
+          kubectl apply -f k8s/storage.yaml
+
+          # ── 5e) Monitoring stack via Helm ───────────────────────────
+          helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --create-namespace \
+            -f k8s/monitoring/prometheus-values.yaml \
+            --wait --timeout 5m
+
+          # ── 5f) Monitoring CRDs ─────────────────────────────────────
+          kubectl apply -f k8s/monitoring/grafana-datasource.yaml
+          kubectl apply -f k8s/monitoring/app-dashboard.yaml
+          kubectl apply -f k8s/monitoring/app-service-monitor.yaml
+          kubectl apply -f k8s/monitoring/prometheus-rules.yaml
+
+          # ── 5g) Application configs ──────────────────────────────────
           kubectl apply -f k8s/configmap.yaml
           kubectl apply -f k8s/secret.yaml
-          kubectl apply -f k8s/storage.yaml
+
+          # ── 5h) HPA (HorizontalPodAutoscaler) ────────────────────────
+          kubectl apply -f k8s/hpa.yaml
+
+          # ── 5i) Backend deployment (Cloud SQL Proxy + NFS mount) ────
           kubectl apply -f k8s/backend-deployment.yaml
+
+          # ── 5j) Frontend deployment ──────────────────────────────────
+          kubectl apply -f k8s/frontend-deployment.yaml
+
+          # ── 5k) Ingress + ManagedCertificate (HTTPS) ─────────────────
           kubectl apply -f k8s/ingress.yaml
+
+          # ── 5l) Grafana ingress + ManagedCertificate ─────────────────
+          kubectl apply -f k8s/monitoring/grafana-ingress.yaml
 
       - name: Verify deployment
         run: kubectl rollout status deployment/doc-backend -n doc-system --timeout=300s

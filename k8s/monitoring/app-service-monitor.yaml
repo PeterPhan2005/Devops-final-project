@@ -1,0 +1,59 @@
+# ============================================================
+# ServiceMonitor — Auto-discover and scrape Doc System metrics
+# PrometheusOperator reads this CRD and auto-generates Prometheus scrape configs.
+#
+# HOW IT WORKS:
+#   Prometheus (via prometheus-operator) watches for ServiceMonitor resources
+#   with label "release: prometheus" in any namespace (serviceMonitorNamespaceSelector: {}).
+#   It selects Services in namespace "doc-system" with label "app: doc-backend".
+#   Then scrapes /actuator/prometheus on port "http" (port name on the Service).
+#
+# REQUIREMENT:
+#   Backend Service "doc-backend-svc" MUST have a named port "http" on 8080.
+#   Backend must expose /actuator/prometheus endpoint (micrometer-registry-prometheus).
+# ============================================================
+
+# ── Backend ServiceMonitor ──────────────────────────────────
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: doc-backend-monitor
+  namespace: monitoring
+  labels:
+    release: prometheus    # ← Prometheus picks up monitors with this label
+    app: doc-backend
+spec:
+  # Match Services in "doc-system" namespace
+  selector:
+    matchLabels:
+      app: doc-backend      # ← Must match Service.spec.selector.app
+  namespaceSelector:
+    matchNames:
+      - doc-system          # ← Namespace where the Service lives
+
+  endpoints:
+    # Scrape Spring Boot Actuator Prometheus endpoint
+    - port: http            # ← Named port on the Service (not container port)
+      path: /actuator/prometheus
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings:
+        # Tag scraped metrics with tier=application for alerting
+        - targetLabel: tier
+          replacement: application
+
+  # Propagate pod-level labels to metrics
+  targetLabels:
+    - app
+    - namespace
+    - version
+
+# ── Frontend ───────────────────────────────────────────────
+# NOTE: React frontend does NOT expose a /metrics endpoint.
+#       Frontend is monitored via kube-state-metrics (pod/container metrics)
+#       and the app-dashboard Grafana panel (CPU, Memory, Pod Status).
+#
+# To add frontend metrics in the future:
+#   1. Add a /metrics endpoint to the React app (e.g., via nginx stub_status)
+#   2. Create a Service with a named port "http"
+#   3. Add a ServiceMonitor here selecting that Service

@@ -1,16 +1,37 @@
+# ============================================================
+# ConfigMap — Spring Boot application configuration
+# All config comes from environment variables (12-factor app pattern)
+#
+# DATABASE CONNECTION:
+#   Cloud SQL Proxy runs as sidecar in the same pod, listening on localhost:5432
+#   No hardcoded Cloud SQL IP needed — connection goes through the proxy sidecar
+#   Proxy authenticates via Workload Identity (no credentials file)
+#
+# After terraform apply, verify:
+#   terraform output sql_connection_name   → used in Cloud SQL Proxy SQLINSTANCE env var
+#   terraform output filestore_nfs_ip      → update k8s/nfs-pv.yaml NFSSERVER
+# ============================================================
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: doc-system-config
   namespace: doc-system
 data:
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://10.244.0.5:5432/docdb"
+  # Database: connects via Cloud SQL Proxy sidecar on localhost
+  # No hardcoded IP — proxy handles private connectivity
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://localhost:5432/docdb"
   SPRING_DATASOURCE_USERNAME: "docuser"
-  DB_HOST: "10.244.0.5"
+  DB_HOST: "localhost"          # Cloud SQL Proxy is in same pod, on localhost
   DB_PORT: "5432"
   DB_NAME: "docdb"
+
+  # Application
   SHOW_SQL: "false"
   FORMAT_SQL: "false"
   MAX_FILE_SIZE: "50MB"
   MAX_REQUEST_SIZE: "50MB"
   APP_UPLOAD_DIR: "/app/uploads"
+
+  # CORS — includes production domain
+  CORS_ALLOWED_ORIGINS: "https://devops.peterphan.online,http://devops.peterphan.online,http://localhost:5173,http://localhost:3000"

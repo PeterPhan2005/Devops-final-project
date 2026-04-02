@@ -1,12 +1,30 @@
+# ============================================================
+# PersistentVolumeClaim — Filestore NFS (ReadWriteMany)
+# This PVC is bound to the manual PV defined in nfs-pv.yaml
+#
+# HOW IT WORKS:
+#   1. nfs-pv.yaml creates a PersistentVolume pointing to Filestore NFS
+#   2. This PVC selects that PV via label selector
+#   3. Backend pods mount the PVC as /app/uploads
+#   4. ReadWriteMany allows HPA to scale to multiple pods
+#
+# UPDATE: Before deploying, update nfs-pv.yaml with the Filestore IP:
+#   terraform output filestore_nfs_ip
+# ============================================================
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: doc-system-uploads
   namespace: doc-system
 spec:
+  # Bind to the manual PV created by nfs-pv.yaml
+  selector:
+    matchLabels:
+      type: doc-uploads
   accessModes:
-    - ReadWriteOnce    # ← Đổi từ ReadWriteMany
-  storageClassName: standard  # ← Đổi từ standard-rwx
+    - ReadWriteMany
+  storageClassName: ""    # No dynamic provisioner — manual PV binding
   resources:
     requests:
-      storage: 1Gi
+      storage: 10Gi

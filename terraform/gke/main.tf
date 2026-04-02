@@ -143,6 +143,22 @@ resource "google_project_iam_member" "gke_sa_artifact" {
   member  = "serviceAccount:${google_service_account.gke_sa.email}"
 }
 
+# Filestore access — required for NFS shared volume
+resource "google_project_iam_member" "gke_sa_filestore" {
+  project = var.project_id
+  role    = "roles/file.editor"
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
+
+# Workload Identity: allow K8s ServiceAccount "cloudsql-proxy-sa" in namespace "doc-system"
+# to impersonate GCP Service Account gke_sa via Workload Identity.
+# The actual K8s SA is created via kubectl in CI/CD (k8s/service-account.yaml).
+resource "google_service_account_iam_member" "cloudsql_wi" {
+  service_account_id = google_service_account.gke_sa.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[doc-system/cloudsql-proxy-sa]"
+}
+
 # Outputs
 output "cluster_name" {
   value = google_container_cluster.main.name

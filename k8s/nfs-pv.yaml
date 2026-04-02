@@ -1,0 +1,45 @@
+# ============================================================
+# PersistentVolume — Filestore NFS share
+# Bound to PersistentVolumeClaim: doc-system-uploads (storage.yaml)
+#
+# IMPORTANT: Replace NFSSERVER with the actual Filestore IP
+#   Get it from: terraform output filestore_nfs_ip
+#   After terraform apply, update: nfs.serverAddress: "<filestore-ip>"
+# ============================================================
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: doc-system-uploads-pv
+  labels:
+    type: doc-uploads
+    app: doc-backend
+spec:
+  capacity:
+    storage: 10Gi    # Label only; actual storage is on Filestore
+  accessModes:
+    - ReadWriteMany  # RWX: multiple pods across multiple nodes can mount
+  persistentVolumeReclaimPolicy: Retain   # Don't delete on PVC delete (protect data)
+  nfs:
+    server: "<filestore-ip>"    # ← UPDATE: terraform output filestore_nfs_ip
+    path: "/doc-uploads"        # Filestore export path
+
+---
+# PersistentVolumeClaim — claims the above PV
+# PVC name must match backend-deployment.yaml volumeMount claimName
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: doc-system-uploads
+  namespace: doc-system
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""    # Empty: no dynamic provisioner, use manual PV binding
+  resources:
+    requests:
+      storage: 10Gi
+  # Selector to bind to the manual PV above
+  selector:
+    matchLabels:
+      type: doc-uploads

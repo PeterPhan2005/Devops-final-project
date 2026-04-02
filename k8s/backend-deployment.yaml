@@ -1,15 +1,24 @@
+# ============================================================
+# Backend Deployment — Spring Boot + Cloud SQL Proxy + NFS
+# ============================================================
+# Architecture:
+#   Cloud SQL Proxy sidecar ──► Cloud SQL (private IP) via Workload Identity
+#   Backend (Spring Boot)     ──► Cloud SQL via localhost:5432 (Unix socket or TCP)
+#   Backend (Spring Boot)     ──► /app/uploads via NFS (Filestore RWX)
+# ============================================================
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: doc-backend
   namespace: doc-system
 spec:
-  replicas: 1               # ← 1 pod (RWO PVC không thể share giữa 2 pods khác node)
+  # HPA can now scale to multiple replicas because PVC is ReadWriteMany (Filestore NFS)
+  replicas: 1
   selector:
     matchLabels:
       app: doc-backend
 
-  # Rolling update strategy — không downtime
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -20,16 +29,59 @@ spec:
     metadata:
       labels:
         app: doc-backend
+
     spec:
-      # Security: chạy non-root
+      # ── 1. ServiceAccount for Workload Identity (Cloud SQL Proxy) ──
+      # Annotation maps this K8s SA → GCP SA (doc-system-gke-sa)
+      # Set during CI/CD deploy via sed: annotation value comes from terraform output
+      serviceAccountName: cloudsql-proxy-sa
+
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
 
+      # ── 2. Containers ────────────────────────────────────────
       containers:
+
+        # ── 2a. Cloud SQL Proxy sidecar ──────────────────────
+        # Authenticates to Cloud SQL via Workload Identity (no credentials file needed)
+        # Listens on localhost:5432 and proxies to Cloud SQL private IP
+        - name: cloudsql-proxy
+          image: gcr.io/cloudsql-docker/community-gce-sidecar:1.21.1
+          imagePullPolicy: Always
+
+          # SQLINSTANCE from Secret (recommended for prod)
+          env:
+            - name: SQLINSTANCE
+              valueFrom:
+                secretKeyRef:
+                  name: doc-system-secret
+                  key: SQLINSTANCE
+            - name: SQL_PORT
+              value: "5432"
+            - name: SQL_PROXY_FLAGS
+              value: "-ip_address_types=PRIVATE"
+
+          ports:
+            - containerPort: 5432
+              name: postgres
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 2     # cloudsql-proxy runs as non-root user
+
+        # ── 2b. Spring Boot Backend ──────────────────────────
         - name: backend
-          # Thay bằng image của bạn
+          # CI/CD will update this tag via sed
           image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-backend:v2
           imagePullPolicy: Always
 
@@ -43,18 +95,19 @@ spec:
             - secretRef:
                 name: doc-system-secret
 
-          # Volume mount cho uploads
+          # Mount NFS volume for document uploads (Filestore RWX)
           volumeMounts:
             - name: uploads
               mountPath: /app/uploads
 
-          # Health check
           livenessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
+            failureThreshold: 3
+
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -62,7 +115,6 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
 
-          # Resource limits
           resources:
             requests:
               cpu: "250m"
@@ -71,13 +123,15 @@ spec:
               cpu: "500m"
               memory: "1Gi"
 
-      # Share volume giữa các pods
+      # ── 3. Volumes ──────────────────────────────────────────
       volumes:
+        # NFS shared volume (Filestore ReadWriteMany) — multiple pods can mount simultaneously
         - name: uploads
           persistentVolumeClaim:
             claimName: doc-system-uploads
 
 ---
+# Backend Service — ClusterIP with BackendConfig for GCLB health checks
 apiVersion: v1
 kind: Service
 metadata:

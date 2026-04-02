@@ -1,0 +1,78 @@
+# ============================================================
+# HorizontalPodAutoscaler — Auto-scale backend based on CPU + Memory
+# Tier 5 requirement: self-healing + autoscaling behaviour
+#
+# HOW IT WORKS:
+#   HPA queries the Metrics API (kube-state-metrics + nodeExporter)
+#   to get current CPU/memory utilization of pods in the target Deployment.
+#   It then adjusts replicas to keep utilization near the target.
+#
+# METRICS:
+#   - CPU: container_cpu_usage_seconds_total (cAdvisor/kubelet)
+#   - Memory: container_memory_working_set_bytes (cAdvisor/kubelet)
+# ============================================================
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: doc-backend-hpa
+  namespace: doc-system
+  labels:
+    app: doc-backend
+    tier: application
+spec:
+  # Scale target: the backend Deployment
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: doc-backend
+
+  # Replica bounds
+  minReplicas: 1
+  maxReplicas: 4    # Matches GKE node pool max (4 nodes, each 1 pod with RWO PVC)
+
+  # ── Metric 1: CPU Utilization (built-in, no extra setup) ──
+  # Scale when average CPU across all pods exceeds 70% of their requested CPU
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Target: 70% of the CPU requested in the Deployment spec
+          averageUtilization: 70
+
+    # ── Metric 2: Memory Utilization (built-in, no extra setup) ──
+    # Scale when average memory across all pods exceeds 80% of their requested memory
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+  # ── Behaviour: Control HOW HPA scales up/down ──
+  behavior:
+    scaleDown:
+      # Wait at least 5 minutes after a scale-down before scaling down again
+      # Prevents flapping when load briefly drops
+      stabilizationWindowSeconds: 300
+      policies:
+        # Do not reduce more than 1 pod at a time
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleUp:
+      # No stabilization window for scale-up — react immediately to load spikes
+      stabilizationWindowSeconds: 0
+      policies:
+        # Allow doubling pods immediately
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        # Or add at most 2 pods at a time (whichever allows faster scale)
+        - type: Pods
+          value: 2
+          periodSeconds: 15
+        # Prefer scaling up quickly (higher priority)
+        selectPolicy: Max
