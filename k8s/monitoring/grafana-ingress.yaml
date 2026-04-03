@@ -12,7 +12,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: "gce"
     kubernetes.io/ingress.static-ip-name: "grafana-ip"
-    # HTTP → HTTPS redirect (allow HTTP so GKE can redirect to HTTPS)
+    # HTTP must be allowed for GKE health checks and SSL cert provisioning
     kubernetes.io/ingress.allow-http: "true"
     networking.gke.io/managed-certificates: "grafana-cert"
 spec:
