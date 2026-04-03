@@ -22,7 +22,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain   # Don't delete on PVC delete (protect data)
   nfs:
     server: "<filestore-ip>"    # ← UPDATE: terraform output filestore_nfs_ip
-    path: "/doc-uploads"        # Filestore export path
+    path: "/doc_uploads"        # Filestore export path (underscores only)
 
 ---
 # PersistentVolumeClaim — claims the above PV

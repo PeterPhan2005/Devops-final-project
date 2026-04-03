@@ -13,19 +13,19 @@
 variable "project_id"   { type = string }
 variable "project_name" { type = string }
 variable "gcp_region"   { type = string }
+variable "gcp_zone"     { type = string }    # Zone required by google provider v5.x
 variable "vpc_network"  { type = string }    # VPC self_link for Filestore placement
 
 resource "google_filestore_instance" "main" {
-  project = var.project_id
-  name    = "${var.project_name}-filestore"
-
-  # Note: region is inferred from the provider's region (no longer a resource arg in google v5.x)
+  project  = var.project_id
+  name     = "${var.project_name}-filestore"
+  location = var.gcp_zone    # zone deprecated in favor of location in google provider v5.x
 
   tier = "BASIC_HDD"   # $0.06/GB/month — cost-effective for documents
 
   file_shares {
     capacity_gb = 1024          # 1 TiB = 1024 GiB
-    name        = "doc-uploads" # NFS export path: /doc-uploads
+    name        = "doc_uploads" # NFS export path: /doc_uploads (underscores only, no hyphens)
   }
 
   networks {

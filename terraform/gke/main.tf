@@ -15,6 +15,7 @@ resource "google_container_cluster" "main" {
   location                 = var.gcp_region
   remove_default_node_pool = true
   initial_node_count       = 1
+  deletion_protection      = false
 
   network    = var.vpc_network
   subnetwork = var.subnetwork

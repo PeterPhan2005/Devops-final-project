@@ -68,5 +68,6 @@ module "filestore" {
   project_id   = var.project_id
   project_name = var.project_name
   gcp_region   = var.gcp_region
-  vpc_network  = module.vpc.vpc_self_link
+  gcp_zone     = var.gcp_zone
+  vpc_network  = module.vpc.vpc_network_id
 }

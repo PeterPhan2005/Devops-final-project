@@ -30,7 +30,7 @@ resource "google_sql_database_instance" "main" {
   deletion_protection = false
 
   settings {
-    tier              = "db-e2-micro"
+    tier              = "db-f1-micro"
     availability_type = "ZONAL"
     disk_type         = "PD_SSD"
     disk_size         = 10

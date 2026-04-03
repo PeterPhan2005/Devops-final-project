@@ -63,6 +63,11 @@ output "vpc_self_link" {
   value = google_compute_network.main.self_link
 }
 
+# Network ID (not self_link) — required by Filestore for network project mismatch
+output "vpc_network_id" {
+  value = google_compute_network.main.id
+}
+
 output "subnetwork_name" {
   value = google_compute_subnetwork.gke.name
 }
