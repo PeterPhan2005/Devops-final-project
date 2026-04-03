@@ -6,6 +6,27 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html', 'lcov'],
+      reportsDirectory: './coverage',
+      exclude: [
+        'node_modules/',
+        'dist/',
+        '**/*.config.js',
+        '**/*.config.ts',
+        '**/main.jsx',
+        '**/index.css',
+      ],
+      // Set thresholds but don't fail CI (thresholds are aspirational)
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 80,
+        statements: 80,
+        autoUpdate: false,
+      },
+    },
   },
   server: {
     port: 5173,
