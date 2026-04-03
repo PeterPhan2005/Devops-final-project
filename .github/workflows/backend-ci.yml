@@ -269,6 +269,7 @@ jobs:
       - name: Terraform Plan
         working-directory: ./terraform
         env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
           TF_VAR_db_password: ${{ secrets.TERRAFORM_DB_PASSWORD }}
         run: |
           TARGET="${{ github.event.inputs.terraform_target }}"
@@ -281,6 +282,7 @@ jobs:
       - name: Terraform Apply
         working-directory: ./terraform
         env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
           TF_VAR_db_password: ${{ secrets.TERRAFORM_DB_PASSWORD }}
         run: |
           # Skip apply if manually triggered with skip_terraform=true (plan-only mode)
