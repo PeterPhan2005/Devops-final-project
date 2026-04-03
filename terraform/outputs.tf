@@ -63,8 +63,3 @@ output "gke_service_account_email" {
   description = "GKE Node Service Account email (used for Workload Identity binding)"
   value       = module.gke.gke_service_account_email
 }
-
-output "sql_connection_name" {
-  description = "Cloud SQL instance connection name (used for Cloud SQL Proxy)"
-  value       = module.cloud-sql.sql_connection_name
-}
