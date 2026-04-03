@@ -64,10 +64,11 @@ module "registry" {
 
 # Filestore NFS — shared file storage for document uploads (enables HPA multi-pod)
 module "filestore" {
-  source       = "./filestore"
-  project_id   = var.project_id
-  project_name = var.project_name
-  gcp_region   = var.gcp_region
-  gcp_zone     = var.gcp_zone
-  vpc_network  = module.vpc.vpc_network_id
+  source              = "./filestore"
+  project_id          = var.project_id
+  project_name        = var.project_name
+  gcp_region          = var.gcp_region
+  gcp_zone            = var.gcp_zone
+  vpc_network         = module.vpc.vpc_network_id
+  terraform_sa_email = "terraform-sa@${var.project_id}.iam.gserviceaccount.com"
 }

@@ -10,11 +10,12 @@
 # VPC:     Shared VPC so GKE nodes in any subnet can access
 # ============================================================
 
-variable "project_id"   { type = string }
-variable "project_name" { type = string }
-variable "gcp_region"   { type = string }
-variable "gcp_zone"     { type = string }    # Zone required by google provider v5.x
-variable "vpc_network"  { type = string }    # VPC network name or self_link (extracts short name for Filestore API)
+variable "project_id"        { type = string }
+variable "project_name"      { type = string }
+variable "gcp_region"        { type = string }
+variable "gcp_zone"          { type = string }
+variable "vpc_network"       { type = string }
+variable "terraform_sa_email" { type = string }   # terraform service account for IAM
 
 resource "google_filestore_instance" "main" {
   project  = var.project_id
@@ -52,4 +53,11 @@ output "nfs_path" {
 output "instance_name" {
   description = "Filestore instance name"
   value       = google_filestore_instance.main.name
+}
+
+# IAM: terraform SA needs file.editor to read Filestore instance during plan/refresh
+resource "google_project_iam_member" "terraform_sa_filestore" {
+  project = var.project_id
+  role    = "roles/file.editor"
+  member  = "serviceAccount:${var.terraform_sa_email}"
 }
