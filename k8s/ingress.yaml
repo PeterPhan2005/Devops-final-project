@@ -27,7 +27,7 @@ metadata:
   namespace: doc-system
   annotations:
     kubernetes.io/ingress.class: "gce"
-    kubernetes.io/ingress.global-static-ip-name: "doc-system-final"
+    networking.gke.io/static-ip-name: "doc-system-final"
     networking.gke.io/managed-certificates: "doc-system-cert"
     kubernetes.io/ingress.allow-http: "true"
 spec:
