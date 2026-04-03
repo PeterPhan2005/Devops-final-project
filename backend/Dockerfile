@@ -33,10 +33,14 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
 
 COPY --from=builder /app/target/*.jar app.jar
 
-# Run as root so bind mount file sharing works with macOS host
-# For prod deployment, change to: USER appuser
-USER root
-RUN chmod 777 /app/uploads
+# Ensure /app/uploads is writable by UID 1000 (Kubernetes runAsUser)
+# No chmod 777 needed — this is cleaner than the previous approach.
+RUN mkdir -p /app/uploads && \
+    chown 1000:0 /app/uploads && \
+    chmod 750 /app/uploads
+
+# Switch to non-root user (UID 1000)
+USER 1000
 
 EXPOSE 8080
 

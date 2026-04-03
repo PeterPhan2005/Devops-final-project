@@ -23,6 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── CodeQL SAST — scan JavaScript/TypeScript source for security issues ──
+      # Detects: XSS, code injection, path traversal, hardcoded secrets, etc.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -33,9 +41,30 @@ jobs:
         run: npm ci
         working-directory: ./frontend
 
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"
+
       - name: Lint
         run: npm run lint || true
         working-directory: ./frontend
+
+      - name: Test
+        run: npm run test
+        working-directory: ./frontend
+
+      - name: Generate Coverage Report
+        run: npm run test:coverage || true
+        working-directory: ./frontend
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+          fail_ci_if_error: false
 
       - name: Build
         run: npm run build
@@ -190,7 +219,8 @@ jobs:
             --wait --timeout 5m
 
           # ── 3) PrometheusOperator CRDs ───────────────────────────────
-          kubectl apply -f k8s/monitoring/grafana-datasource.yaml
+          # Note: grafana-datasource.yaml removed — datasource provisioned by
+          # prometheus-values.yaml sidecar (grafana.sidecar.datasources.enabled: true)
           kubectl apply -f k8s/monitoring/app-dashboard.yaml
           kubectl apply -f k8s/monitoring/app-service-monitor.yaml
           kubectl apply -f k8s/monitoring/prometheus-rules.yaml

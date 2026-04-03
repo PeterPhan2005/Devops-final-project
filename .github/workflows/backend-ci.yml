@@ -35,13 +35,38 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      # ── CodeQL SAST — scan Java source code for security vulnerabilities ──
+      # Detects: SQL injection, XXE, deserialization, path traversal, etc.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java
+          queries: security-extended   # ← More comprehensive than default security query
+
       - name: Build
         run: mvn clean package -DskipTests
         working-directory: ./backend
 
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:java"   # ← Unique category so Trivy SARIF uploads don't conflict
+
       - name: Test
         run: mvn test
         working-directory: ./backend
+
+      - name: Generate Coverage Report
+        run: mvn jacoco:report
+        working-directory: ./backend
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./backend/target/site/jacoco/jacoco.xml
+          flags: backend
+          name: backend-coverage
+          fail_ci_if_error: false
 
   security-scan:
     runs-on: ubuntu-latest
@@ -214,13 +239,22 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan -no-color || true
+        env:
+          TF_VAR_db_password: ${{ secrets.TERRAFORM_DB_PASSWORD }}
+        run: terraform plan -no-color
 
       - name: Terraform Apply
         working-directory: ./terraform
         env:
           TF_VAR_db_password: ${{ secrets.TERRAFORM_DB_PASSWORD }}
         run: terraform apply -auto-approve -no-color
+
+      # Export structured outputs for use by the deploy job (jq-parsed, not grep)
+      - name: Export Terraform outputs
+        working-directory: ./terraform
+        run: |
+          terraform output -json > outputs.json
+          gcloud storage cp outputs.json gs://doc-system-terraform-state-pete/prod/outputs.json
 
   deploy:
     runs-on: ubuntu-latest
@@ -251,19 +285,31 @@ jobs:
             --region=${{ env.GAR_REGION }} --project=${{ env.PROJECT_ID }}
 
       # ── 3) Fetch Terraform outputs (Filestore IP + GKE SA email) ──
-      - name: Download Terraform state
+      - name: Download Terraform outputs
         run: |
-          gcloud storage cp gs://doc-system-terraform-state-pete/prod/default.tfstate /tmp/terraform.tfstate
+          # Prefer outputs.json (structured JSON from terraform output -json)
+          # Fallback to .tfstate if outputs.json not yet generated
+          gcloud storage cp gs://doc-system-terraform-state-pete/prod/outputs.json /tmp/outputs.json || \
+            gcloud storage cp gs://doc-system-terraform-state-pete/prod/default.tfstate /tmp/terraform.tfstate
 
       - name: Extract Terraform outputs
         run: |
-          # GKE Service Account email (for Workload Identity annotation on K8s SA)
-          GKE_SA_EMAIL=$(grep -oP '"gke_service_account_email"[^}]*value = "\K[^"]+' /tmp/terraform.tfstate)
+          # Download outputs.json from GCS (structured, versioned, easier to parse than .tfstate)
+          gcloud storage cp gs://doc-system-terraform-state-pete/prod/outputs.json /tmp/outputs.json || \
+            gcloud storage cp gs://doc-system-terraform-state-pete/prod/default.tfstate /tmp/terraform.tfstate
+
+          # Parse using jq (robust — no regex fragility)
+          if [ -f /tmp/outputs.json ]; then
+            GKE_SA_EMAIL=$(jq -r '.gke_service_account_email.value' /tmp/outputs.json)
+            FILESTORE_IP=$(jq -r '.filestore_nfs_ip.value' /tmp/outputs.json)
+          else
+            # Fallback: parse from .tfstate (legacy)
+            GKE_SA_EMAIL=$(grep -oP '"gke_service_account_email"[^}]*value = "\K[^"]+' /tmp/terraform.tfstate)
+            FILESTORE_IP=$(grep -oP '"filestore_nfs_ip"[^}]*value = "\K[^"]+' /tmp/terraform.tfstate)
+          fi
+
           echo "GKE_SA_EMAIL=$GKE_SA_EMAIL"
           echo "GKE_SA_EMAIL=$GKE_SA_EMAIL" >> $GITHUB_ENV
-
-          # Filestore NFS IP (for NFS PersistentVolume)
-          FILESTORE_IP=$(grep -oP '"filestore_nfs_ip"[^}]*value = "\K[^"]+' /tmp/terraform.tfstate)
           echo "FILESTORE_IP=$FILESTORE_IP"
           echo "FILESTORE_IP=$FILESTORE_IP" >> $GITHUB_ENV
 
@@ -304,7 +350,8 @@ jobs:
             --wait --timeout 5m
 
           # ── 5f) Monitoring CRDs ─────────────────────────────────────
-          kubectl apply -f k8s/monitoring/grafana-datasource.yaml
+          # Note: grafana-datasource.yaml removed — datasource provisioned by
+          # prometheus-values.yaml sidecar (grafana.sidecar.datasources.enabled: true)
           kubectl apply -f k8s/monitoring/app-dashboard.yaml
           kubectl apply -f k8s/monitoring/app-service-monitor.yaml
           kubectl apply -f k8s/monitoring/prometheus-rules.yaml

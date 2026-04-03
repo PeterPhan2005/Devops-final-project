@@ -26,12 +26,15 @@ resource "google_container_cluster" "main" {
 
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = false
+    enable_private_endpoint = true
     master_ipv4_cidr_block  = "172.16.0.0/28"
   }
 
   master_authorized_networks_config {
     cidr_blocks {
+      # Restrict master access to known IPs only.
+      # Replace 0.0.0.0/0 with your specific IP or office CIDR.
+      # For remote access, use gcloud compute start-iap-tunnel instead.
       cidr_block   = "0.0.0.0/0"
       display_name = "Allow all"
     }
@@ -80,7 +83,7 @@ resource "google_container_node_pool" "main" {
     machine_type = "e2-small"
     disk_type    = "pd-standard"
     disk_size_gb = 20
-    spot         = true
+    spot         = false
 
     service_account = google_service_account.gke_sa.email
 
