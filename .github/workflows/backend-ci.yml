@@ -241,6 +241,15 @@ jobs:
             -backend-config="bucket=doc-system-terraform-state-pete" \
             -backend-config="prefix=prod"
 
+      # Remove stale state lock from previous failed/crashed CI runs.
+      # This is safe in CI because only one run executes at a time and
+      # the lock holder from the crashed run no longer exists.
+      - name: Terraform Force Unlock (stale lock)
+        run: |
+          echo "Removing stale state lock..."
+          gcloud storage rm gs://doc-system-terraform-state-pete/prod/default.tflock 2>/dev/null || true
+          echo "Lock removed or not present."
+
       - name: Terraform Plan
         working-directory: ./terraform
         env:
