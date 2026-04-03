@@ -18,7 +18,8 @@ variable "vpc_network"  { type = string }    # VPC self_link for Filestore place
 resource "google_filestore_instance" "main" {
   project = var.project_id
   name    = "${var.project_name}-filestore"
-  region  = var.gcp_region
+
+  # Note: region is inferred from the provider's region (no longer a resource arg in google v5.x)
 
   tier = "BASIC_HDD"   # $0.06/GB/month — cost-effective for documents
 
@@ -27,8 +28,8 @@ resource "google_filestore_instance" "main" {
     name        = "doc-uploads" # NFS export path: /doc-uploads
   }
 
-  network {
-    name         = var.vpc_network
+  networks {
+    network      = var.vpc_network
     connect_mode = "DIRECT_PEERING"  # Low-latency, no internet
   }
 }
