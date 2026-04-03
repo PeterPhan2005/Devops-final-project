@@ -99,12 +99,14 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-secrets.sarif'
+          category: trivy/secret-scan
 
       - name: Upload Docker image scan results
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-image-results.sarif'
+          category: trivy/image-scan
 
   push:
     runs-on: ubuntu-latest
