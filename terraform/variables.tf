@@ -1,7 +1,11 @@
 variable "project_id" {
   description = "Google Cloud Project ID"
   type        = string
-  default     = "My First Project"
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.project_id)) && !contains(["my first project", "my-first-project", "test", "example"], lower(var.project_id))
+    error_message = "The project_id must be a valid GCP project ID (6-30 lowercase letters, digits, or hyphens, start with letter, end with letter or digit) and cannot be a placeholder value like 'My First Project', 'test', or 'example'."
+  }
 }
 
 variable "gcp_region" {

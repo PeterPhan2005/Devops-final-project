@@ -14,7 +14,7 @@ variable "project_id"   { type = string }
 variable "project_name" { type = string }
 variable "gcp_region"   { type = string }
 variable "gcp_zone"     { type = string }    # Zone required by google provider v5.x
-variable "vpc_network"  { type = string }    # VPC self_link for Filestore placement
+variable "vpc_network"  { type = string }    # VPC network name or self_link (extracts short name for Filestore API)
 
 resource "google_filestore_instance" "main" {
   project  = var.project_id
@@ -29,7 +29,9 @@ resource "google_filestore_instance" "main" {
   }
 
   networks {
-    network = var.vpc_network
+    # Filestore API accepts only short network name (not full self_link).
+    # Handle both formats: "doc-system-vpc" and "projects/.../global/networks/doc-system-vpc"
+    network = split("/", var.vpc_network)[length(split("/", var.vpc_network)) - 1]
     modes   = ["MODE_IPV4"]
   }
 }

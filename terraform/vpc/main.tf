@@ -75,19 +75,18 @@ output "subnetwork_name" {
 # ── Global Static IPs ─────────────────────────────────────────────
 
 # Main application static IP (used by doc-system-ingress)
+# NOTE: purpose/ip_version intentionally omitted — GCP returns empty string for
+# IN_USE global addresses, causing terraform drift. The IPs are already correctly
+# allocated as GLOBAL (used by GKE ingress forwarding rules).
 resource "google_compute_global_address" "app" {
-  project    = var.project_id   # GCP project ID, not project name
-  name       = "${var.project_name}-final"
-  purpose    = "GLOBAL"
-  ip_version = "IPV4"
+  project = var.project_id
+  name    = "${var.project_name}-final"
 }
 
-# Grafana static IP (used by grafana-ingress + grafana-cert)
+# Grafana static IP (used by grafana-ingress + ManagedCertificate)
 resource "google_compute_global_address" "grafana" {
-  project    = var.project_id   # GCP project ID, not project name
-  name       = "grafana-ip"
-  purpose    = "GLOBAL"
-  ip_version = "IPV4"
+  project = var.project_id
+  name    = "grafana-ip"
 }
 
 output "app_static_ip" {
