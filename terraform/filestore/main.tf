@@ -29,8 +29,8 @@ resource "google_filestore_instance" "main" {
   }
 
   networks {
-    network      = var.vpc_network
-    connect_mode = "DIRECT_PEERING"  # Low-latency, no internet
+    network = var.vpc_network
+    modes   = ["MODE_IPV4"]
   }
 }
 
