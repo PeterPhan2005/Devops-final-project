@@ -1,0 +1,4 @@
+# Trivy config for CI — disable secret scanning
+scanners:
+  vuln: true
+  secret: false

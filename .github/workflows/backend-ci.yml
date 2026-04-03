@@ -64,24 +64,30 @@ jobs:
 
       # ── Trivy: scan Maven dependencies via filesystem (no Docker needed) ──
       # - Scans pom.xml + .m2/repository for known CVEs in Java libraries
+      # - scanners vuln: disable secret scanning (avoids false positives on .env files)
       # - ignore-unfixed: skip vulns without available patch (OS base image, unmaintained libs)
       # - exit-code '1': FAIL pipeline on CRITICAL vulns with fix available
       # - exit-code '0': pass pipeline for HIGH vulns (reviewed via SARIF in GitHub Security tab)
+      # Trivy filesystem scan from within backend/ (avoids "backend/backend" path error)
+      # --scanners vuln: disable secret scanning (prevents exit 1 on .env files)
+      # --exit-code 1: fail pipeline if CRITICAL CVE with fix is found
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: './backend'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL'
-          exit-code: '1'
-          scanners: 'vuln'
-          # Skip vulns without available patch — these are not actionable
-          # OS base image vulns (Alpine): inherited from JRE image, app team can't patch OS
-          ignore-unfixed: true
+        run: |
+          trivy fs \
+            --scanners vuln \
+            --severity CRITICAL \
+            --ignore-unfixed \
+            --format sarif \
+            --output trivy-results.sarif \
+            --exit-code 1 \
+            .
+        working-directory: ./backend
 
-      # Build Docker image separately (only used by push job, not for scanning)
+      # Copy SARIF to repo root so upload-sarif step can find it
+      - name: Copy SARIF to repo root
+        run: cp ./backend/trivy-results.sarif ./trivy-results.sarif
+
+      # Build Docker image (used by push job, separate from dependency scan)
       - name: Build Docker image
         run: docker build ./backend -t backend-scan:latest
 
@@ -97,11 +103,11 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
 
+      # Upload only the dependency scan result (blocking, from trivy fs above)
       - name: Upload scan results to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          # Primary: dependency scan (blocking)
           sarif_file: 'trivy-results.sarif'
 
   push:
