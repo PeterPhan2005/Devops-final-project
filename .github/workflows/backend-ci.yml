@@ -62,41 +62,30 @@ jobs:
         run: mvn package -DskipTests -B
         working-directory: ./backend
 
-      # ── Trivy: install then scan Maven dependencies ──
-      # - aquasecurity/trivy-action bundles Trivy v0.57+ with Java support
-      # - scan-type=fs: scan local filesystem (no Docker needed)
-      # - scanners=vuln: disable secret/misconfig scanning (avoid false positives)
-      # - ignore-unfixed: skip vulns without patch (OS base, unmaintained libs)
-      # - exit-code '1': fail pipeline on CRITICAL CVE with fix available
-      - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
+      # ── Setup Trivy directly (avoids action cache issues) ──
+      # - aquasecurity/setup-trivy: installs Trivy binary into PATH
+      # - Runs trivy fs with explicit DB cache dir to avoid stale cache
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.3.0
         with:
-          scan-type: 'fs'
-          scan-ref: './backend'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL'
-          exit-code: '1'
-          scanners: 'vuln'
-          ignore-unfixed: true
+          version: '0.58.0'
+
+      - name: Trivy vulnerability scan
+        run: |
+          trivy fs \
+            --scanners vuln \
+            --severity CRITICAL \
+            --ignore-unfixed \
+            --format sarif \
+            --output trivy-results.sarif \
+            --exit-code 1 \
+            ./backend
 
       # Build Docker image (used by push job, separate from dependency scan)
       - name: Build Docker image
         run: docker build ./backend -t backend-scan:latest
 
-      # ── Container image scan: report only (GitHub Security tab, non-blocking) ──
-      - name: Trivy image scan (report only)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'backend-scan:latest'
-          format: 'sarif'
-          output: 'trivy-image-results.sarif'
-          severity: 'CRITICAL'
-          # OS layer vulns: non-blocking (app team can't patch OS base image)
-          exit-code: '0'
-          ignore-unfixed: true
-
-      # Upload only the dependency scan result (blocking, from trivy fs above)
+      # Upload dependency scan results to GitHub Security tab
       - name: Upload scan results to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v4
