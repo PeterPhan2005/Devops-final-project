@@ -3,6 +3,40 @@ variable "project_name" { type = string }
 variable "environment"  { type = string }
 variable "gcp_region"  { type = string }
 
+# Cloud NAT: enables private GKE nodes to pull images from external registries
+# (quay.io, ghcr.io, DockerHub). Without NAT, nodes can only reach
+# GCP APIs via Private Google Access (GAR, GCR) but not public internet.
+resource "google_compute_router" "nat" {
+  name    = "${var.project_name}-router"
+  network = google_compute_network.main.name
+  region  = var.gcp_region
+}
+
+resource "google_compute_address" "nat_ip" {
+  name         = "${var.project_name}-nat-ip"
+  region       = var.gcp_region
+  address_type = "EXTERNAL"
+  network_tier = "PREMIUM"
+}
+
+resource "google_compute_router_nat" "main" {
+  name                               = "${var.project_name}-nat"
+  router                             = google_compute_router.nat.name
+  region                             = var.gcp_region
+  nat_ip_allocate_option             = "MANUAL_ONLY"
+  nat_ips                            = [google_compute_address.nat_ip.self_link]
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  # Allow this NAT to handle all traffic from the GKE subnet
+  # (only this project's subnet is on this router)
+  enable_endpoint_independent_mapping = false
+}
+
+output "nat_ip_address" {
+  description = "Cloud NAT IP address"
+  value       = google_compute_address.nat_ip.address
+}
+
 resource "google_compute_network" "main" {
   name                    = "${var.project_name}-vpc"
   auto_create_subnetworks = false
