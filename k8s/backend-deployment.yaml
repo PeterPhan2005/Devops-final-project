@@ -48,7 +48,7 @@ spec:
         # Authenticates to Cloud SQL via Workload Identity (no credentials file needed)
         # Listens on localhost:5432 and proxies to Cloud SQL private IP
         - name: cloudsql-proxy
-          image: gcr.io/cloudsql-docker/community-gce-sidecar:1.21.1
+          image: gcr.io/cloudsql-docker/gce-proxy:latest
           imagePullPolicy: Always
 
           # SQLINSTANCE from Secret (recommended for prod)
