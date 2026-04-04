@@ -18,9 +18,11 @@ prometheusOperator:
     patch:
       enabled: true
 
-  # Use upstream Prometheus Operator image (NO custom GAR image needed)
+  # Use upstream Prometheus Operator image
+  # Note: set registry explicitly to avoid chart prepending default quay.io twice
   image:
-    repository: quay.io/prometheus-operator/prometheus-operator
+    registry: quay.io
+    repository: prometheus-operator/prometheus-operator
     tag: v0.89.0
 
 # ── 2. Prometheus Server ────────────────────────────────────
@@ -62,7 +64,7 @@ prometheus:
 
     persistentVolume:
       enabled: true
-      storageClass: standard
+      storageClass: standard-rwo
       size: 10Gi
 
     service:
@@ -133,7 +135,7 @@ grafana:
   # Persistence for dashboards and settings
   persistence:
     enabled: true
-    storageClassName: "standard"
+    storageClassName: "standard-rwo"
     size: 2Gi
 
   service:

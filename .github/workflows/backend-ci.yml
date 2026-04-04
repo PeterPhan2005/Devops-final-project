@@ -419,7 +419,7 @@ jobs:
             --create-namespace \
             -f k8s/monitoring/prometheus-values.yaml \
             --reset-values \
-            --wait --timeout 5m || {
+            --wait --timeout 15m || {
               # If upgrade fails due to pending operation, uninstall and retry
               echo "Helm release stuck — uninstalling and reinstalling..."
               helm uninstall prometheus --namespace monitoring || true
