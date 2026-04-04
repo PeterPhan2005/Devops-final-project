@@ -418,7 +418,17 @@ jobs:
             --namespace monitoring \
             --create-namespace \
             -f k8s/monitoring/prometheus-values.yaml \
-            --wait --timeout 5m
+            --reset-values \
+            --wait --timeout 5m || {
+              # If upgrade fails due to pending operation, uninstall and retry
+              echo "Helm release stuck — uninstalling and reinstalling..."
+              helm uninstall prometheus --namespace monitoring || true
+              helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                --namespace monitoring \
+                --create-namespace \
+                -f k8s/monitoring/prometheus-values.yaml \
+                --wait --timeout 5m
+            }
 
           # ── 5f) Monitoring CRDs ─────────────────────────────────────
           # Note: grafana-datasource.yaml removed — datasource provisioned by
