@@ -390,6 +390,9 @@ jobs:
           kubectl apply -f k8s/nfs-pv.yaml
 
           # ── 5d) NFS PVC (must exist before pods start) ──────────────
+          # Delete first: existing PVC was created with wrong accessMode (RWO vs RWX)
+          # and spec is immutable after creation. Recreate is required.
+          kubectl delete --ignore-not-found pvc/doc-system-uploads -n doc-system
           kubectl apply -f k8s/storage.yaml
 
           # ── 5e) Monitoring stack via Helm ───────────────────────────
