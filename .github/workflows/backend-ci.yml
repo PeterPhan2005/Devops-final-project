@@ -386,18 +386,30 @@ jobs:
           # ── 5b) ServiceAccount (Workload Identity binding) ─────────
           kubectl apply -f k8s/service-account.yaml
 
-          # ── 5c) NFS PV + PVC (Filestore) — delete old ones first ──
-          # Existing PVC has wrong accessMode (RWO vs RWX) and spec is immutable.
-          # Step 1: patch finalizers to unstick any Terminating PVC
-          kubectl patch pvc/doc-system-uploads -n doc-system \
-            -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
-          # Step 2: delete old PV and PVC (order matters: PV last to release claim)
-          kubectl delete --ignore-not-found pvc/doc-system-uploads -n doc-system --wait=true 2>/dev/null || true
-          kubectl delete --ignore-not-found pv/doc-system-uploads-pv --wait=true 2>/dev/null || true
-          sleep 3   # Let API stabilize
-          # Step 3: create fresh PV + PVC with correct RWX accessMode
-          kubectl apply -f k8s/nfs-pv.yaml
-          kubectl apply -f k8s/storage.yaml
+          # ── 5c) NFS PV + PVC (Filestore) ─────────────────────────
+          # The PV/PVC may still exist from a previous partial run.
+          # If they already have the correct RWX spec, just patch finalizers and skip.
+          # If they have the wrong RWO spec, we need to delete and recreate.
+          #
+          # Check current PVC accessMode
+          CURRENT_MODE=$(kubectl get pvc doc-system-uploads -n doc-system \
+            -o jsonpath='{.spec.accessModes[0]}' 2>/dev/null || echo "NOT_FOUND")
+          if [ "$CURRENT_MODE" = "ReadWriteMany" ]; then
+            echo "PVC already has correct ReadWriteMany mode — skipping PV/PVC step"
+          else
+            echo "PVC has wrong mode ($CURRENT_MODE) or not found — recreating with RWX"
+            # Patch finalizers to unstick any Terminating PVC
+            kubectl patch pvc/doc-system-uploads -n doc-system \
+              -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+            # Delete PVC first (releases claim on PV)
+            kubectl delete pvc/doc-system-uploads -n doc-system --wait=true 2>/dev/null || true
+            # Delete PV (with Retain policy, data stays on Filestore)
+            kubectl delete pv/doc-system-uploads-pv --wait=true 2>/dev/null || true
+            sleep 5   # Extra settle time for API propagation
+            # Create fresh with correct RWX
+            kubectl apply -f k8s/nfs-pv.yaml
+            kubectl apply -f k8s/storage.yaml
+          fi
 
           # ── 5e) Monitoring stack via Helm ───────────────────────────
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --quiet

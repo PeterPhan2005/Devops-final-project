@@ -147,9 +147,10 @@ spec:
       rules:
 
         # WARNING: Backend health endpoint returning non-UP status
+        # Prometheus Operator job name format: "{namespace}/{ServiceMonitorName}"
         - alert: BackendHealthDown
           expr: |
-            sum by (pod) (up{job="doc-backend-monitor", pod=~"doc-backend-.*"}) == 0
+            sum by (pod) (up{job=~"monitoring/doc-backend-monitor"}) == 0
           for: 2m
           labels:
             severity: warning
@@ -242,9 +243,10 @@ spec:
             description: "PVC `{{ $labels.persistentvolumeclaim }}` is {{ $value | humanizePercentage }} full. Consider increasing storage or retention reduction."
 
         # WARNING: Prometheus target missing (not scraping any endpoint)
+        # Prometheus Operator job name format: "{namespace}/{ServiceMonitorName}"
         - alert: PrometheusTargetMissing
           expr: |
-            sum by (job) (up{job=~"doc-backend-monitor|doc-frontend-monitor"}) == 0
+            sum by (job) (up{job=~"monitoring/doc-backend-monitor|monitoring/doc-frontend-monitor"}) == 0
           for: 2m
           labels:
             severity: warning
@@ -253,8 +255,9 @@ spec:
             description: "Prometheus scrape target `{{ $labels.job }}` has been down for more than 2 minutes."
 
         # WARNING: Grafana is not responding
+        # Use pod-based query to avoid reliance on specific job naming conventions
         - alert: GrafanaDown
-          expr: up{job="grafana", namespace="monitoring"} == 0
+          expr: sum(kube_pod_container_status_running{namespace="monitoring", pod=~"prometheus-grafana-.*"}) == 0
           for: 2m
           labels:
             severity: warning

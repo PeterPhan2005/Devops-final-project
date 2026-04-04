@@ -185,7 +185,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "container_memory_usage_bytes{pod=~\"doc-.*\"}",
+              "expr": "container_memory_working_set_bytes{pod=~\"doc-.*\"}",
               "legendFormat": "{{pod}} Memory",
               "refId": "A"
             }
