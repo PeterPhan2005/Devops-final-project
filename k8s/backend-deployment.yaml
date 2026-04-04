@@ -51,17 +51,19 @@ spec:
           image: gcr.io/cloudsql-docker/gce-proxy:latest
           imagePullPolicy: Always
 
-          # SQLINSTANCE from Secret (recommended for prod)
+          # gce-proxy image requires explicit command — it has no default entrypoint
+          command: ["/cloud_sql_proxy"]
+          args:
+            - "-instances=$(SQLINSTANCE)=tcp:5432"
+            - "-ip_address_types=PRIVATE"
+
+          # SQLINSTANCE from Secret
           env:
             - name: SQLINSTANCE
               valueFrom:
                 secretKeyRef:
                   name: doc-system-secret
                   key: SQLINSTANCE
-            - name: SQL_PORT
-              value: "5432"
-            - name: SQL_PROXY_FLAGS
-              value: "-ip_address_types=PRIVATE"
 
           ports:
             - containerPort: 5432
@@ -77,12 +79,12 @@ spec:
 
           securityContext:
             runAsNonRoot: true
-            runAsUser: 2     # cloudsql-proxy runs as non-root user
+            runAsUser: 2
 
         # ── 2b. Spring Boot Backend ──────────────────────────
         - name: backend
           # CI/CD will update this tag via sed
-          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-backend:v2
+          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-backend:latest
           imagePullPolicy: Always
 
           ports:
