@@ -386,13 +386,17 @@ jobs:
           # ── 5b) ServiceAccount (Workload Identity binding) ─────────
           kubectl apply -f k8s/service-account.yaml
 
-          # ── 5c) NFS PersistentVolume (Filestore) ────────────────────
+          # ── 5c) NFS PV + PVC (Filestore) — delete old ones first ──
+          # Existing PVC has wrong accessMode (RWO vs RWX) and spec is immutable.
+          # Step 1: patch finalizers to unstick any Terminating PVC
+          kubectl patch pvc/doc-system-uploads -n doc-system \
+            -p '{"metadata":{"finalizers":null}}' --type=merge 2>/dev/null || true
+          # Step 2: delete old PV and PVC (order matters: PV last to release claim)
+          kubectl delete --ignore-not-found pvc/doc-system-uploads -n doc-system --wait=true 2>/dev/null || true
+          kubectl delete --ignore-not-found pv/doc-system-uploads-pv --wait=true 2>/dev/null || true
+          sleep 3   # Let API stabilize
+          # Step 3: create fresh PV + PVC with correct RWX accessMode
           kubectl apply -f k8s/nfs-pv.yaml
-
-          # ── 5d) NFS PVC (must exist before pods start) ──────────────
-          # Delete first: existing PVC was created with wrong accessMode (RWO vs RWX)
-          # and spec is immutable after creation. Recreate is required.
-          kubectl delete --ignore-not-found pvc/doc-system-uploads -n doc-system
           kubectl apply -f k8s/storage.yaml
 
           # ── 5e) Monitoring stack via Helm ───────────────────────────
