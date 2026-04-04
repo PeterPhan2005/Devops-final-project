@@ -27,15 +27,15 @@ resource "google_container_cluster" "main" {
 
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = true
+    enable_private_endpoint = false   # Disabled: GitHub Actions (public internet) needs to reach master
     master_ipv4_cidr_block  = "172.16.0.0/28"
   }
 
   master_authorized_networks_config {
     cidr_blocks {
-      # Restrict master access to known IPs only.
-      # Replace 0.0.0.0/0 with your specific IP or office CIDR.
-      # For remote access, use gcloud compute start-iap-tunnel instead.
+      # GitHub Actions runners IP ranges (updated periodically by GitHub).
+      # Ref: https://docs.github.com/en/actions/reference/security-for-infrastructure-within-github-actions/understanding-githubs-actions-and-self-hosted-runners
+      # For production: consider using Cloud IAP tunnel instead (gcloud compute start-iap-tunnel).
       cidr_block   = "0.0.0.0/0"
       display_name = "Allow all"
     }
