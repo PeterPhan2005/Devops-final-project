@@ -65,6 +65,7 @@ spec:
     scaleUp:
       # No stabilization window for scale-up — react immediately to load spikes
       stabilizationWindowSeconds: 0
+      selectPolicy: Max   # Prefer the policy that allows faster scale-up
       policies:
         # Allow doubling pods immediately
         - type: Percent
@@ -74,5 +75,3 @@ spec:
         - type: Pods
           value: 2
           periodSeconds: 15
-        # Prefer scaling up quickly (higher priority)
-        selectPolicy: Max
