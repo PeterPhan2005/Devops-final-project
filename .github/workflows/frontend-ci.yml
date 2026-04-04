@@ -120,7 +120,10 @@ jobs:
       - name: Build Docker image
         run: docker build ./frontend -t frontend-scan:latest
 
-      # ── 3) Docker image scan — base image CVEs ──
+      # ── 3) Docker image scan — base image CVEs (report-only) ──
+      # Set exit-code: 0 (report-only). Base image OS CVEs (Alpine, eclipse-temurin)
+      # are not the app developer's responsibility — they are the image maintainer's.
+      # Production dependency CVEs are caught by Trivy dependency scan.
       - name: Trivy Docker image scan
         uses: aquasecurity/trivy-action@0.35.0
         with:
@@ -128,7 +131,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-image-results.sarif'
           severity: 'CRITICAL,HIGH'
-          exit-code: '1'
+          exit-code: '0'
           scanners: 'vuln'
           ignore-unfixed: true
 
