@@ -414,21 +414,36 @@ jobs:
           # ── 5e) Monitoring stack via Helm ───────────────────────────
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
+
+          # First: delete any stale helm release secret that can cause
+          # "another operation is in progress" errors from previous cancelled runs.
+          kubectl delete secret -n monitoring -l "owner=helm" 2>/dev/null || true
+
+          # Install without --wait: CSI WaitForFirstConsumer provisioner can take 3-5 min
+          # to bind the GCE PD for the Grafana PVC, causing helm --wait to falsely fail.
+          # We poll pods separately after the install.
           helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --create-namespace \
             -f k8s/monitoring/prometheus-values.yaml \
             --reset-values \
-            --wait --timeout 15m || {
-              # If upgrade fails due to pending operation, uninstall and retry
-              echo "Helm release stuck — uninstalling and reinstalling..."
-              helm uninstall prometheus --namespace monitoring || true
+            || {
+              # If install fails, clear stale secrets and retry once.
+              echo "Helm install failed — clearing stale secrets and retrying..."
+              kubectl delete secret -n monitoring -l "owner=helm" 2>/dev/null || true
               helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
                 --namespace monitoring \
                 --create-namespace \
                 -f k8s/monitoring/prometheus-values.yaml \
-                --wait --timeout 5m
+                --reset-values
             }
+
+          # Poll until all critical monitoring pods are ready (up to 10 min for CSI PVC bind)
+          echo "Waiting for monitoring stack pods to become ready..."
+          kubectl wait --for=condition=ready pod -n monitoring -l "app.kubernetes.io/name=prometheus,app.kubernetes.io/component=server" --timeout=300s 2>/dev/null || true
+          kubectl wait --for=condition=ready pod -n monitoring -l "app.kubernetes.io/name=grafana" --timeout=300s 2>/dev/null || true
+          kubectl wait --for=condition=ready pod -n monitoring -l "app.kubernetes.io/name=alertmanager" --timeout=180s 2>/dev/null || true
+          echo "Monitoring stack ready."
 
           # ── 5f) Monitoring CRDs ─────────────────────────────────────
           # Note: grafana-datasource.yaml removed — datasource provisioned by
