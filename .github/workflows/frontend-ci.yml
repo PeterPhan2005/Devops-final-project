@@ -216,11 +216,23 @@ jobs:
           kubectl apply -f k8s/namespace.yaml
 
           # ── 2) Monitoring stack via Helm (idempotent: install or upgrade) ──
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
           helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --create-namespace \
             -f k8s/monitoring/prometheus-values.yaml \
-            --wait --timeout 5m
+            --reset-values \
+            --wait --timeout 15m || {
+              # If upgrade fails due to pending operation, uninstall and retry
+              echo "Helm release stuck — uninstalling and reinstalling..."
+              helm uninstall prometheus --namespace monitoring || true
+              helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+                --namespace monitoring \
+                --create-namespace \
+                -f k8s/monitoring/prometheus-values.yaml \
+                --wait --timeout 5m
+            }
 
           # ── 3) PrometheusOperator CRDs ───────────────────────────────
           # Note: grafana-datasource.yaml removed — datasource provisioned by
