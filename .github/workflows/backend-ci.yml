@@ -400,6 +400,8 @@ jobs:
           kubectl apply -f k8s/storage.yaml
 
           # ── 5e) Monitoring stack via Helm ───────────────────────────
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --quiet
+          helm repo update
           helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --create-namespace \
