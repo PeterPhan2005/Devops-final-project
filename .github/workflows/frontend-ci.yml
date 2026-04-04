@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
+      - 'k8s/**'              # Re-deploy k8s manifests (incl. frontend image tag) when k8s files change
   pull_request:
     branches: [main]
     paths:
       - 'frontend/**'
+      - 'k8s/**'
 
 env:
   REGISTRY: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo
