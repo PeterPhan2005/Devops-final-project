@@ -272,7 +272,16 @@ jobs:
           # ── 5) HPA ─────────────────────────────────────────────────
           kubectl apply -f k8s/hpa.yaml
 
-          # ── 6) Frontend deployment ─────────────────────────────────
+          # ── 6) Frontend — clean up old ReplicaSets before deploying ──
+          # Old RSes (with wrong image tags) block rollout by keeping desired=1
+          # and competing for cluster node resources.
+          echo "Cleaning up old frontend ReplicaSets..."
+          kubectl scale deployment doc-frontend -n doc-system --replicas=0 2>/dev/null || true
+          kubectl wait --for=delete pod -n doc-system -l app=doc-frontend --timeout=60s 2>/dev/null || true
+          sleep 5
+          kubectl delete rs -n doc-system -l app=doc-frontend 2>/dev/null || true
+
+          # ── 7) Frontend deployment ─────────────────────────────────
           sed -i "s|doc-frontend:[a-zA-Z0-9._-]*|doc-frontend:${SHORT_SHA}|" k8s/frontend-deployment.yaml
           kubectl apply -f k8s/frontend-deployment.yaml
 

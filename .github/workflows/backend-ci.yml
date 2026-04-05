@@ -459,16 +459,31 @@ jobs:
           # ── 5h) HPA (HorizontalPodAutoscaler) ────────────────────────
           kubectl apply -f k8s/hpa.yaml
 
-          # ── 5i) Backend deployment (Cloud SQL Proxy + NFS mount) ────
+          # ── 5i) Backend — clean up old ReplicaSets before deploying ──
+          # Old RSes (with wrong image tags) keep desired=1, competing for
+          # cluster resources and blocking rollout. Scale to 0 first, then
+          # delete stale RSes, then apply with correct image.
+          echo "Cleaning up old backend/frontend ReplicaSets..."
+          kubectl scale deployment doc-backend -n doc-system --replicas=0 2>/dev/null || true
+          kubectl scale deployment doc-frontend -n doc-system --replicas=0 2>/dev/null || true
+          # Wait for pods to terminate (up to 60s for graceful shutdown)
+          kubectl wait --for=delete pod -n doc-system -l app=doc-backend --timeout=60s 2>/dev/null || true
+          kubectl wait --for=delete pod -n doc-system -l app=doc-frontend --timeout=60s 2>/dev/null || true
+          sleep 5   # Extra settle time for RS controller to observe desired=0
+          # Delete all stale RSes (only those with desired=0 after scale-down)
+          kubectl delete rs -n doc-system -l app=doc-backend 2>/dev/null || true
+          kubectl delete rs -n doc-system -l app=doc-frontend 2>/dev/null || true
+
+          # ── 5j) Backend deployment (Cloud SQL Proxy + NFS mount) ────
           kubectl apply -f k8s/backend-deployment.yaml
 
-          # ── 5j) Frontend deployment ─────────────────────────────────
+          # ── 5k) Frontend deployment ─────────────────────────────────
           kubectl apply -f k8s/frontend-deployment.yaml
 
-          # ── 5k) Ingress + ManagedCertificate (HTTPS) ─────────────────
+          # ── 5l) Ingress + ManagedCertificate (HTTPS) ─────────────────
           kubectl apply -f k8s/ingress.yaml
 
-          # ── 5l) Grafana ingress + ManagedCertificate ─────────────────
+          # ── 5m) Grafana ingress + ManagedCertificate ─────────────────
           kubectl apply -f k8s/monitoring/grafana-ingress.yaml
 
       - name: Verify deployment
