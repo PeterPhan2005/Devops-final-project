@@ -84,7 +84,7 @@ spec:
         # ── 2b. Spring Boot Backend ──────────────────────────
         - name: backend
           # CI/CD will update this tag via sed
-          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-backend:latest
+          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-backend:a33bfb8
           imagePullPolicy: Always
 
           ports:
@@ -106,15 +106,15 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
             periodSeconds: 10
-            failureThreshold: 3
+            failureThreshold: 5
 
           readinessProbe:
             httpGet:
               path: /actuator/health
               port: 8080
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 5
 
           resources:

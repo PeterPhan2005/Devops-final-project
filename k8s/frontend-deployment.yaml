@@ -23,7 +23,7 @@ spec:
       containers:
         - name: frontend
           # Thay bằng image của bạn
-          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-frontend:v3
+          image: us-central1-docker.pkg.dev/serious-physics-477417-i8/doc-system-repo/doc-frontend:a33bfb8
           imagePullPolicy: Always
 
           ports:
